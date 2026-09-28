@@ -2,7 +2,7 @@
 
 A quick-wit party game for 3 to 8 players. One screen hosts (TV, laptop, or a shared screen on a call), everyone else plays on their phone. No accounts, no installs.
 
-**Play:** https://zusannah.github.io/zingers/
+**Play:** https://playzingers.com
 
 ## How it works
 
