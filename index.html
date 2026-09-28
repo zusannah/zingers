@@ -494,7 +494,7 @@ function doReveal(){
   else {
     if(vx.length>vy.length) px += 100*mult; else if(vy.length>vx.length) py += 100*mult;
     const total = vx.length+vy.length;
-    if(total>=1 && (vx.length===total || vy.length===total)){ zinger = vx.length ? "x" : "y"; if(zinger==="x") px += 200*mult; else py += 200*mult; }
+    if(total>=2 && (vx.length===total || vy.length===total)){ zinger = vx.length ? "x" : "y"; if(zinger==="x") px += 200*mult; else py += 200*mult; }
   }
   if(X.text) G.scores[X.pid] = (G.scores[X.pid]||0)+px;
   if(Y.text) G.scores[Y.pid] = (G.scores[Y.pid]||0)+py;
