@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zingers</title>
+<meta name="description" content="A quick-wit party game. One screen hosts, everyone plays on their phone. No accounts, no installs.">
+<meta name="theme-color" content="#E8356F">
+<meta property="og:title" content="Zingers">
+<meta property="og:description" content="A quick-wit party game. One screen hosts, everyone plays on their phone.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23E8356F'/%3E%3Cpath d='M18 16h28v7L28 41h18v7H18v-7l18-18H18z' fill='%23FFE9C7'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFE9C7; --bg2:#FFD99A; --card:#FFFFFF; --text:#2B0F3A; --muted:#6B4A7A;
+  --x:#FFC83D; --y:#22C7B8; --pink:#E8356F; --ink:#2B0F3A; --line:#2B0F3A;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#2B0F3A; --bg2:#45185C; --card:#3A1450; --text:#FFF3D1; --muted:#CDB7D9;
+    --pink:#FF4F8B; --line:#FFC83D; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#2B0F3A; --bg2:#45185C; --card:#3A1450; --text:#FFF3D1; --muted:#CDB7D9;
+  --pink:#FF4F8B; --line:#FFC83D; color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+*,*::before,*::after{box-sizing:inherit}
+body{background:radial-gradient(ellipse at 50% -10%, var(--bg2), var(--bg) 60%);background-color:var(--bg);color:var(--text);font:400 18px/1.45 Rubik, system-ui, -apple-system, "Segoe UI", sans-serif}
+#app{min-height:100%;display:flex;flex-direction:column}
+h1,h2,.logo,.bigcode,.marquee,.huge,.vs,.rank{font-family:Bungee, Impact, "Arial Black", sans-serif;font-weight:400;letter-spacing:.01em}
+button{font:600 1rem/1.2 Rubik, system-ui, sans-serif;border:3px solid var(--line);border-radius:14px;padding:.8em 1.2em;cursor:pointer;background:var(--card);color:var(--text)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--pink);outline-offset:3px}
+button:disabled{opacity:.45;cursor:not-allowed}
+.primary{background:var(--pink);color:#fff;border-color:var(--pink)}
+.big{font-size:1.25rem;padding:.9em 1.6em}
+.ghost{background:transparent}
+.small{font-size:.85rem;padding:.45em .8em;border-width:2px}
+input,select,textarea{font:400 1.1rem Rubik, system-ui, sans-serif;width:100%;padding:.7em .8em;border:3px solid var(--line);border-radius:12px;background:var(--card);color:var(--text)}
+textarea{font-size:1rem;min-height:5.5em;resize:vertical}
+label{display:block;font-weight:600;margin:.9em 0 .35em}
+details{margin-top:.9em}
+summary{cursor:pointer;font-weight:600}
+.muted{color:var(--muted)}
+.warn{background:var(--pink);color:#fff;padding:.6em 1em;border-radius:10px;margin:0 auto;max-width:60ch}
+
+/* home */
+.home{max-width:980px;margin:0 auto;padding:clamp(16px,4vw,40px);width:100%}
+.home h1{font-size:clamp(2.8rem,9vw,5.5rem);line-height:.95;margin:.2em 0 .1em;color:var(--pink);text-shadow:4px 4px 0 var(--line)}
+.home .tag{font-size:1.15rem;max-width:46ch;margin:0 0 1.6em}
+.panes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+.pane{background:var(--card);border:3px solid var(--line);border-radius:20px;padding:22px}
+.pane h2{margin:0 0 .2em;font-size:1.5rem}
+.pane > button{width:100%;margin-top:1.1em}
+.fine{font-size:.9rem;margin-top:1.6em;max-width:70ch}
+
+/* host */
+.host{flex:1;display:flex;flex-direction:column;padding:clamp(12px,2.5vw,32px);gap:12px}
+.hbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.logo{font-size:1.6rem;color:var(--pink)}
+.code{margin-left:auto;font-size:1.05rem}
+.code b{font-family:Bungee, Impact, sans-serif;font-weight:400;font-size:1.5rem;letter-spacing:.12em}
+.timer{font-family:Bungee, Impact, sans-serif;font-size:1.9rem;min-width:2.4em;text-align:center;background:var(--text);color:var(--bg);border-radius:12px;padding:.05em .3em}
+.timer:empty{visibility:hidden}
+.stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:18px;max-width:1300px;width:100%;margin:0 auto}
+.joinbox{display:flex;align-items:center;justify-content:center;gap:clamp(16px,4vw,48px);flex-wrap:wrap}
+.qr{background:#fff;border:4px solid var(--line);border-radius:18px;padding:10px;width:clamp(150px,20vw,230px);height:auto;display:block}
+.bigcode{font-size:clamp(4rem,16vw,11rem);line-height:1;letter-spacing:.14em;color:var(--pink);text-shadow:6px 6px 0 var(--line)}
+.url{font-weight:800;word-break:break-all}
+.lead{font-size:1.4rem;margin:0}
+.huge{font-size:clamp(2.2rem,7vw,5.5rem);line-height:1;margin:0}
+.chips,.status{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+.chips li,.status li{border:3px solid var(--c,var(--line));border-radius:999px;padding:.35em 1em;font-weight:800;font-size:1.2rem;background:var(--card)}
+.status li{opacity:.55}
+.status li.done{opacity:1;background:var(--c);color:var(--ink)}
+.status li.gone{text-decoration:line-through}
+.row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.marquee{font-size:clamp(1.5rem,3.6vw,3rem);line-height:1.15;padding:.7em 1em;border:8px dotted var(--x);border-radius:24px;background:var(--card);max-width:28ch}
+.duel{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:stretch;width:100%}
+.vs{align-self:center;font-size:2rem;color:var(--pink)}
+.ans{border-radius:22px;padding:24px;color:var(--ink);font-weight:800;font-size:clamp(1.3rem,3vw,2.4rem);line-height:1.2;display:flex;flex-direction:column;justify-content:center;gap:12px;min-height:180px;border:4px solid var(--ink)}
+.ans.x{background:var(--x)} .ans.y{background:var(--y)}
+.ans .who{font-size:1rem;font-weight:600}
+.ans .pts{font-family:Bungee, Impact, sans-serif;font-weight:400;font-size:1.6rem}
+.ans .votes{font-size:.95rem;font-weight:600}
+.ans.none{opacity:.6;font-style:italic}
+.banner{font-family:Bungee, Impact, sans-serif;font-size:clamp(2rem,6vw,4.2rem);color:var(--pink);text-shadow:4px 4px 0 var(--line);margin:0}
+@media (prefers-reduced-motion:no-preference){.banner{animation:pop .5s cubic-bezier(.2,1.6,.4,1)}}
+@keyframes pop{from{transform:scale(.3) rotate(-8deg);opacity:0}to{transform:none;opacity:1}}
+.board{list-style:none;padding:0;margin:0;width:min(640px,100%);display:flex;flex-direction:column;gap:10px}
+.board li{display:flex;align-items:center;gap:14px;background:var(--card);border:3px solid var(--c,var(--line));border-radius:16px;padding:.55em 1em;font-size:1.35rem;font-weight:800}
+.board .rank{font-size:1.3rem;min-width:1.6em}
+.board .sc{margin-left:auto;font-family:Bungee, Impact, sans-serif;font-weight:400}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;width:100%}
+.fgrid .ans{min-height:120px;font-size:clamp(1.1rem,2.2vw,1.7rem)}
+.fgrid .ans:nth-child(odd){background:var(--x)} .fgrid .ans:nth-child(even){background:var(--y)}
+.num{font-family:Bungee, Impact, sans-serif;font-weight:400;font-size:1rem}
+
+/* player */
+.player{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px;max-width:560px;margin:0 auto;width:100%}
+.pbar{display:flex;align-items:center;gap:10px}
+.pbar .me{font-weight:800;border:3px solid var(--c,var(--line));border-radius:999px;padding:.2em .8em}
+.pbar .timer{margin-left:auto;font-size:1.3rem}
+.pstage{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px}
+.pstage h2{font-size:1.6rem;margin:0;line-height:1.1}
+.pprompt{font-size:1.4rem;font-weight:800;line-height:1.25;background:var(--card);border:3px dotted var(--line);border-radius:16px;padding:16px}
+.pick{width:100%;text-align:left;font-size:1.25rem;font-weight:800;color:var(--ink);padding:1em;border-color:var(--ink);min-height:84px}
+.pick.x{background:var(--x)} .pick.y{background:var(--y)}
+.lost{font-size:.9rem;color:var(--pink);min-height:1.2em}
+.count{font-size:.9rem}
+@media (max-width:700px){.duel{grid-template-columns:1fr}.vs{justify-self:center}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<noscript><p style="padding:20px">Zingers needs JavaScript.</p></noscript>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js" integrity="sha384-x0YgkOr/3UOZP2CRDxGW9e0Q+2Qjyr3uJrm4xU32Y7ZCNAo7Cc7bjhrZMi/dwczu" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/dist/qrcode.js" integrity="sha384-e9EFD6BGC90bkW9aDV5xbbBfzwN7G8YImHao2lfLVKV/hPB0E0go+H3I64h7oHtA" crossorigin="anonymous"></script>
+<script src="prompts.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ---------- helpers ---------- */
+const app = document.getElementById("app");
+function h(tag, attrs, ...kids){
+  const e = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs||{})){
+    if (v===false || v==null) continue;
+    if (k==="class") e.className = v;
+    else if (k==="style") e.setAttribute("style", v);
+    else if (k==="html") e.innerHTML = v;
+    else if (k.startsWith("on") && typeof v==="function") e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v===true ? "" : v);
+  }
+  for (const k of kids.flat(3)){
+    if (k==null || k===false) continue;
+    e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  }
+  return e;
+}
+function mount(node){ app.replaceChildren(node); }
+function clean(s, n){
+  return String(s==null?"":s)
+    .replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g,"")
+    .replace(/\s+/g," ").trim().slice(0,n);
+}
+function rid(){ return (Math.random().toString(36).slice(2,10)+Math.random().toString(36).slice(2,8)).slice(0,14); }
+function shuffle(a){ a=[...a]; for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
+const LETTERS = "BCDFGHJKLMNPQRSTVWXZ";
+function makeCode(){ let s=""; for(let i=0;i<4;i++) s+=LETTERS[Math.floor(Math.random()*LETTERS.length)]; return s; }
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+};
+const COLORS = ["#FF4F8B","#22C7B8","#FFC83D","#9B8CFF","#FF8A3D","#5ED36B","#4FB3FF","#F27BF2"];
+const T = { answer:90000, vote:20000, reveal:7000, scores:8000, intro:4500, fanswer:75000, fvote:30000, freveal:12000 };
+const BANK = window.ZINGERS_PROMPTS || { clean:[], cheeky:[], finals:[] };
+function joinUrl(code){ const u = new URL(location.href); u.search = ""; u.hash = ""; u.searchParams.set("room", code); return u.toString(); }
+function prettyUrl(code){ return joinUrl(code).replace(/^https?:\/\//,""); }
+function qrSvg(text){
+  try{
+    const q = qrcode(0,"M"); q.addData(text); q.make();
+    const n = q.getModuleCount(); let d = "";
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++) if(q.isDark(r,c)) d += `M${c} ${r}h1v1h-1z`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 ${n+4} ${n+4}" class="qr" role="img" aria-label="QR code to join"><path d="${d}" fill="#2B0F3A"/></svg>`;
+  }catch(e){ return ""; }
+}
+
+/* ======================================================================
+   NETWORK: peer-to-peer rooms over WebRTC (PeerJS).
+   The host screen is the server. Players connect straight to it.
+   Same shape as the room API the game was written against:
+   presence(), onPeers(), emit(), on().
+   ====================================================================== */
+const PEER_PREFIX = "zingers-v1-";
+const PEER_OPTS = Object.assign({ debug:0 }, window.ZINGERS_PEER_OPTIONS || {}); /* optional: point at your own PeerServer */
+const Net = {
+  host(code){
+    return new Promise((resolve, reject)=>{
+      if(typeof Peer === "undefined") return reject({code:"no_network_lib"});
+      const peer = new Peer(PEER_PREFIX+code.toLowerCase(), PEER_OPTS);
+      const conns = new Map();           // connectionId -> {conn, presence}
+      let peersCb = ()=>{}; let opened = false;
+      const peers = ()=>[...conns.values()].filter(c=>c.presence).map(c=>({presence:c.presence}));
+      const fire = (joined)=>{ try{ peersCb({ peers:peers(), joined: joined?[joined]:[] }); }catch(e){} };
+      peer.on("open", ()=>{ opened = true; resolve(room); });
+      peer.on("error", err=>{
+        if(!opened) return reject({code: err && err.type === "unavailable-id" ? "taken" : (err && err.type) || "error"});
+      });
+      peer.on("disconnected", ()=>{ setTimeout(()=>{ try{ if(!peer.destroyed) peer.reconnect(); }catch(e){} }, 1500); });
+      peer.on("connection", conn=>{
+        const rec = { conn, presence:null };
+        conns.set(conn.connectionId, rec);
+        conn.on("data", msg=>{
+          if(!msg || typeof msg!=="object") return;
+          if(msg.t==="p" && msg.d && typeof msg.d==="object"){
+            const first = !rec.presence;
+            rec.presence = msg.d;
+            fire(first ? rec : null);
+          }
+        });
+        const drop = ()=>{ if(conns.delete(conn.connectionId)) fire(null); };
+        conn.on("close", drop); conn.on("error", drop);
+      });
+      const room = {
+        presence(){ return Promise.resolve(); },
+        onPeers(cb){ peersCb = cb; },
+        emit(name, data){
+          const pkt = { t:"e", n:name, d:data };
+          for(const {conn} of conns.values()){ if(conn.open){ try{ conn.send(pkt); }catch(e){} } }
+          return Promise.resolve();
+        },
+        on(){},
+        close(){ try{ peer.destroy(); }catch(e){} }
+      };
+    });
+  },
+  join(code, onStatus){
+    return new Promise((resolve, reject)=>{
+      if(typeof Peer === "undefined") return reject({code:"no_network_lib"});
+      const hostId = PEER_PREFIX+code.toLowerCase();
+      const peer = new Peer(PEER_OPTS);
+      const handlers = {}; let pres = {}; let conn = null; let settled = false; let retry = null;
+      const status = s=>{ try{ onStatus && onStatus(s); }catch(e){} };
+      function connect(){
+        clearTimeout(retry);
+        if(peer.destroyed) return;
+        if(peer.disconnected){ try{ peer.reconnect(); }catch(e){} retry = setTimeout(connect, 2000); return; }
+        const c = peer.connect(hostId, { reliable:true, serialization:"json" });
+        conn = c;
+        const giveUp = setTimeout(()=>{ if(!c.open){ try{ c.close(); }catch(e){} if(settled) retry = setTimeout(connect, 1500); else { settled = true; reject({code:"timeout"}); } } }, 12000);
+        c.on("open", ()=>{
+          clearTimeout(giveUp);
+          try{ c.send({t:"p", d:pres}); }catch(e){}
+          status("up");
+          if(!settled){ settled = true; resolve(room); }
+        });
+        c.on("data", msg=>{
+          if(!msg || msg.t!=="e" || typeof msg.n!=="string") return;
+          (handlers[msg.n]||[]).forEach(fn=>{ try{ fn({ data:msg.d, sameTab:false }); }catch(e){} });
+        });
+        c.on("close", ()=>{ if(conn===c && settled){ status("down"); retry = setTimeout(connect, 1500); } });
+        c.on("error", ()=>{});
+      }
+      peer.on("open", connect);
+      peer.on("error", err=>{
+        const t = err && err.type;
+        if(t==="peer-unavailable"){
+          if(!settled){ settled = true; reject({code:"no_room"}); }
+          else { status("down"); retry = setTimeout(connect, 3000); }
+        } else if(!settled && ["browser-incompatible","ssl-unavailable","server-error","socket-error","network"].includes(t)){
+          settled = true; reject({code:t});
+        }
+      });
+      peer.on("disconnected", ()=>{ setTimeout(()=>{ try{ if(!peer.destroyed) peer.reconnect(); }catch(e){} }, 1500); });
+      document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && settled && (!conn || !conn.open)) connect(); });
+      const room = {
+        presence(p){
+          pres = { ...pres, ...p };
+          if(conn && conn.open){ try{ conn.send({t:"p", d:pres}); }catch(e){} }
+          return Promise.resolve();
+        },
+        onPeers(){},
+        emit(){ return Promise.resolve(); },
+        on(name, fn){ (handlers[name] = handlers[name]||[]).push(fn); },
+        close(){ try{ peer.destroy(); }catch(e){} }
+      };
+    });
+  }
+};
+function netError(code){
+  return ({
+    no_room:"No game with that code. Check the big screen and try again.",
+    timeout:"Couldn't reach the host screen. Make sure it's open, then try again.",
+    taken:"That room code is busy. Try again.",
+    no_network_lib:"The game couldn't load its network code. Refresh the page.",
+    "browser-incompatible":"This browser can't run the game. Try Chrome, Safari or Firefox."
+  })[code] || "Connection problem ("+code+"). Refresh and try again.";
+}
+
+/* ---------- home ---------- */
+const urlRoom = (new URLSearchParams(location.search).get("room")||"").toUpperCase().replace(/[^A-Z]/g,"").slice(0,4);
+let busy = false;
+function renderHome(err){
+  const savedName = store.get("zing-name")||"";
+  const savedCode = urlRoom || store.get("zing-code")||"";
+  const codeIn = h("input",{id:"jcode",maxlength:"4",autocomplete:"off",autocapitalize:"characters",placeholder:"ABCD",value:savedCode,style:"text-transform:uppercase;letter-spacing:.2em"});
+  const nameIn = h("input",{id:"jname",maxlength:"16",autocomplete:"nickname",placeholder:"Your name",value:savedName});
+  const spiceIn = h("select",{id:"hspice"}, h("option",{value:"clean"},"Clean"), h("option",{value:"cheeky"},"Cheeky"));
+  const ownIn = h("textarea",{id:"hown",maxlength:"4000",placeholder:"One per line, e.g.\nThe real reason Tom is always late\nA terrible name for our group chat"});
+  const doJoin = ()=>{
+    const code = clean(codeIn.value,4).toUpperCase(), name = clean(nameIn.value,16);
+    if(!/^[A-Z]{4}$/.test(code)) return renderHome("Enter the 4-letter code from the big screen.");
+    if(!name) return renderHome("Enter a name so people know who's winning.");
+    playerJoin(code,name);
+  };
+  nameIn.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); doJoin(); } });
+  const joinBtn = h("button",{class:"primary",disabled:busy,onclick:doJoin}, busy ? "Connecting…" : "Join game");
+  const hostBtn = h("button",{disabled:busy,onclick:()=>{
+    const own = ownIn.value.split(/\n+/).map(s=>clean(s,120)).filter(s=>s.length>3).slice(0,60);
+    hostCreate(spiceIn.value, own);
+  }}, "Host on this screen");
+  const joinPane = h("section",{class:"pane"},
+    h("h2",{},"Join"),
+    h("p",{class:"muted"},"Use the code shown on the host screen."),
+    h("label",{for:"jcode"},"Room code"), codeIn,
+    h("label",{for:"jname"},"Name"), nameIn,
+    joinBtn);
+  const hostPane = h("section",{class:"pane"},
+    h("h2",{},"Host"),
+    h("p",{class:"muted"},"Put this on the TV, a laptop, or share it on a video call. Players join from their phones."),
+    h("label",{for:"hspice"},"Humour"), spiceIn,
+    h("details",{}, h("summary",{},"Add your own prompts (optional)"),
+      h("p",{class:"muted",style:"font-size:.9rem;margin:.5em 0"},"Inside jokes land best. These get used first."), ownIn),
+    hostBtn);
+  mount(h("main",{class:"home"},
+    h("h1",{},"Zingers"),
+    h("p",{class:"tag"},"A quick-wit party game. One screen hosts the show, everyone answers and votes on their phone, and the funniest answer wins."),
+    err ? h("p",{class:"warn",role:"alert"},err) : null,
+    h("div",{class:"panes"}, urlRoom ? [joinPane] : [joinPane, hostPane]),
+    urlRoom ? h("p",{class:"fine"}, h("a",{href:location.pathname,style:"color:inherit"},"Want to host your own game instead?")) : null,
+    h("p",{class:"fine muted"},"3 to 8 players. No accounts or installs. Phones connect straight to the host screen, so keep the host tab open for the whole game.")
+  ));
+  const focusEl = err && /name/.test(err) ? nameIn : (urlRoom && !savedName ? nameIn : (err ? codeIn : null));
+  if(focusEl) focusEl.focus();
+}
+
+/* ======================================================================
+   HOST
+   ====================================================================== */
+const H = { nr:null, code:"", peers:[], G:null, hid:rid(), seq:0, pool:{prompts:[],finals:[]}, used:new Set(),
+            spice:"clean", own:[], lastEmit:0, viewKey:"", colorOf:{}, qr:"" };
+
+function newGame(){ return { phase:"lobby", round:0, players:[], scores:{}, prompts:[], matches:[], mi:0, endsAt:0, rk:"", vk:"", reveal:null, final:null }; }
+function basePrompts(){ return H.spice==="cheeky" ? [...BANK.clean, ...BANK.cheeky] : [...BANK.clean]; }
+function refillPool(){
+  const own = shuffle(H.own.filter(t=>!H.used.has(t)));
+  H.pool.prompts = [...own, ...shuffle(basePrompts().filter(t=>!own.includes(t)))];
+  H.pool.finals = shuffle(BANK.finals);
+}
+
+async function hostCreate(spice, own){
+  if(busy) return;
+  H.spice = spice === "cheeky" ? "cheeky" : "clean"; H.own = own||[];
+  busy = true; renderHome();
+  let code = "", nr = null, lastErr = null;
+  for(let i=0;i<4 && !nr;i++){
+    code = makeCode();
+    try{ nr = await Net.host(code); }catch(e){ lastErr = e; if(!e || e.code!=="taken") break; }
+  }
+  busy = false;
+  if(!nr) return renderHome(netError(lastErr && lastErr.code || "error"));
+  H.nr = nr; H.code = code; H.qr = qrSvg(joinUrl(code));
+  H.nr.onPeers(ch=>{ H.peers = ch.peers; if(ch.joined.length) emitState(); hostRender(false); });
+  H.G = newGame();
+  refillPool();
+  window.addEventListener("beforeunload", e=>{ if(H.G && H.G.phase!=="lobby" && H.G.phase!=="end"){ e.preventDefault(); e.returnValue=""; } });
+  try{ history.replaceState(null,"",location.pathname); }catch(e){}
+  setInterval(hostTick, 250);
+  hostRender(true);
+}
+
+function takeFrom(key, n){
+  const out=[]; let guard=0;
+  while(out.length<n && guard++<400){
+    if(!H.pool[key].length){ if(key==="prompts"){ H.pool.prompts = shuffle(basePrompts()); } else H.pool.finals = shuffle(BANK.finals); }
+    const t = H.pool[key].shift();
+    if(H.used.has(t) && guard<200) continue;
+    H.used.add(t); out.push(t);
+  }
+  return out;
+}
+
+function lobbyPlayers(){
+  const seen = new Map();
+  for(const p of H.peers){
+    const pr = p.presence||{};
+    if(pr.role!=="player") continue;
+    const pid = clean(pr.pid,24), name = clean(pr.name,16);
+    if(!pid || !name || seen.has(pid)) continue;
+    if(!H.colorOf[pid]) H.colorOf[pid] = COLORS[Object.keys(H.colorOf).length % COLORS.length];
+    seen.set(pid,{pid,name});
+  }
+  return [...seen.values()].slice(0,8);
+}
+function presOf(pid){
+  let found = null;
+  for(const p of H.peers){ const pr=p.presence||{}; if(pr.role==="player" && pr.pid===pid) found = pr; }
+  return found;
+}
+function isOn(pid){ return !!presOf(pid); }
+function nameOf(pid){ const p = H.G.players.find(x=>x.pid===pid); return p ? p.name : "?"; }
+function ansOf(pid, key, id){
+  const pr = presOf(pid); const a = pr && pr.ans;
+  if(!a || a.r!==key || !a.a || typeof a.a!=="object") return null;
+  const t = clean(a.a[id],60); return t || null;
+}
+function voteOf(pid, key){
+  const pr = presOf(pid); const v = pr && pr.vote;
+  if(!v || v.k!==key) return null;
+  return v.v;
+}
+
+function changed(){ emitState(); hostRender(true); }
+function setPhase(ph, ms){ H.G.phase = ph; H.G.endsAt = ms ? Date.now()+ms : 0; changed(); }
+
+function startGame(){
+  const G = H.G;
+  G.players = lobbyPlayers().map(p=>({...p, color:H.colorOf[p.pid]}));
+  if(G.players.length < 3) return;
+  G.scores = Object.fromEntries(G.players.map(p=>[p.pid,0]));
+  G.round = 1;
+  setPhase("intro", T.intro);
+}
+
+function tasksOf(pid){ return H.G.prompts.filter(p=>p.a===pid||p.b===pid); }
+function answeredCount(pid){ return tasksOf(pid).filter(p=>ansOf(pid,H.G.rk,p.id)).length; }
+
+function beginAnswer(){
+  const G = H.G;
+  const ps = shuffle(G.players.map(p=>p.pid)), n = ps.length;
+  const texts = takeFrom("prompts", n);
+  G.rk = "r"+G.round+"-"+rid().slice(0,5);
+  G.prompts = texts.map((t,i)=>({ id:"p"+i, t, a:ps[i], b:ps[(i+1)%n] }));
+  setPhase("answer", T.answer);
+}
+function allAnswered(){
+  return H.G.players.every(p => !isOn(p.pid) || answeredCount(p.pid) >= tasksOf(p.pid).length);
+}
+function endAnswer(){
+  const G = H.G;
+  G.matches = G.prompts.map(p=>({ ...p, ta:ansOf(p.a,G.rk,p.id), tb:ansOf(p.b,G.rk,p.id), swap:Math.random()<.5 }))
+                       .filter(m=>m.ta||m.tb);
+  G.matches = shuffle(G.matches);
+  G.mi = 0;
+  if(!G.matches.length) return setPhase("scores", T.scores);
+  startVote();
+}
+function cur(){ return H.G.matches[H.G.mi]; }
+function side(m, s){ const leftIsA = !m.swap; const isA = (s==="x") === leftIsA; return { pid: isA?m.a:m.b, text: isA?m.ta:m.tb }; }
+function voters(m){ return H.G.players.filter(p=>p.pid!==m.a && p.pid!==m.b && isOn(p.pid)); }
+function startVote(){
+  const G = H.G, m = cur();
+  G.vk = G.rk+"-m"+G.mi;
+  if(!m.ta || !m.tb) return doReveal();
+  setPhase("vote", T.vote);
+}
+function votedPids(){ const m=cur(); return voters(m).filter(p=>{ const v=voteOf(p.pid,H.G.vk); return v==="x"||v==="y"; }).map(p=>p.pid); }
+function allVoted(){ const m=cur(); return votedPids().length >= voters(m).length; }
+function doReveal(){
+  const G = H.G, m = cur(), mult = G.round;
+  const X = side(m,"x"), Y = side(m,"y");
+  const vx=[], vy=[];
+  if(m.ta && m.tb){
+    for(const p of G.players){ if(p.pid===m.a||p.pid===m.b) continue; const v=voteOf(p.pid,G.vk); if(v==="x") vx.push(p.name); else if(v==="y") vy.push(p.name); }
+  }
+  let px = vx.length*100*mult, py = vy.length*100*mult, zinger=null, forfeit=false;
+  if(!X.text || !Y.text){ forfeit = true; if(X.text) px = 250*mult; if(Y.text) py = 250*mult; }
+  else {
+    if(vx.length>vy.length) px += 100*mult; else if(vy.length>vx.length) py += 100*mult;
+    const total = vx.length+vy.length;
+    if(total>=1 && (vx.length===total || vy.length===total)){ zinger = vx.length ? "x" : "y"; if(zinger==="x") px += 200*mult; else py += 200*mult; }
+  }
+  if(X.text) G.scores[X.pid] = (G.scores[X.pid]||0)+px;
+  if(Y.text) G.scores[Y.pid] = (G.scores[Y.pid]||0)+py;
+  G.reveal = { x:{...X, votes:vx, pts:X.text?px:0}, y:{...Y, votes:vy, pts:Y.text?py:0}, zinger, forfeit };
+  setPhase("reveal", T.reveal);
+}
+function nextMatch(){
+  const G = H.G; G.reveal = null; G.mi++;
+  if(G.mi < G.matches.length) startVote(); else setPhase("scores", T.scores);
+}
+function afterScores(){
+  const G = H.G;
+  if(G.round < 2){ G.round++; setPhase("intro", T.intro); }
+  else if(G.round === 2){ G.round = 3; setPhase("fintro", T.intro); }
+  else setPhase("end", 0);
+}
+function beginFinal(){
+  const G = H.G;
+  G.final = { t: takeFrom("finals",1)[0], fk:"f-"+rid().slice(0,6), opts:[], res:null };
+  setPhase("fanswer", T.fanswer);
+}
+function allFinalAnswered(){ const G=H.G; return G.players.every(p=>!isOn(p.pid) || ansOf(p.pid,G.final.fk,"f")); }
+function endFinalAnswer(){
+  const G = H.G;
+  G.final.opts = shuffle(G.players.map(p=>({pid:p.pid, t:ansOf(p.pid,G.final.fk,"f")})).filter(o=>o.t)).map((o,i)=>({...o,i}));
+  if(G.final.opts.length < 2) return setPhase("end",0);
+  setPhase("fvote", T.fvote);
+}
+function finalVote(pid){
+  const G=H.G, v = voteOf(pid,G.final.fk);
+  const o = G.final.opts.find(o=>o.i===v);
+  return (o && o.pid!==pid) ? o : null;
+}
+function finalVoters(){ const G=H.G; return G.players.filter(p=>isOn(p.pid) && G.final.opts.some(o=>o.pid!==p.pid)); }
+function allFinalVoted(){ return finalVoters().every(p=>finalVote(p.pid)); }
+function finalReveal(){
+  const G = H.G;
+  const tally = new Map(G.final.opts.map(o=>[o.i,[]]));
+  for(const p of G.players){ const o = finalVote(p.pid); if(o) tally.get(o.i).push(p.name); }
+  const top = Math.max(0,...[...tally.values()].map(v=>v.length));
+  G.final.res = G.final.opts.map(o=>{
+    const v = tally.get(o.i); let pts = v.length*300; const best = top>0 && v.length===top;
+    if(best) pts += 300;
+    G.scores[o.pid] = (G.scores[o.pid]||0)+pts;
+    return {...o, votes:v, pts, best};
+  });
+  setPhase("freveal", T.freveal);
+}
+function playAgain(){
+  const keepColors = H.colorOf;
+  H.G = newGame(); H.colorOf = keepColors;
+  changed();
+}
+
+function hostTick(){
+  const G = H.G; if(!G) return;
+  const now = Date.now(), up = G.endsAt && now >= G.endsAt;
+  switch(G.phase){
+    case "intro": if(up) beginAnswer(); break;
+    case "answer": if(up || allAnswered()) endAnswer(); break;
+    case "vote": if(up || allVoted()) doReveal(); break;
+    case "reveal": if(up) nextMatch(); break;
+    case "scores": if(up) afterScores(); break;
+    case "fintro": if(up) beginFinal(); break;
+    case "fanswer": if(up || allFinalAnswered()) endFinalAnswer(); break;
+    case "fvote": if(up || allFinalVoted()) finalReveal(); break;
+    case "freveal": if(up) setPhase("end",0); break;
+  }
+  updateTimer(G.endsAt ? G.endsAt-Date.now() : 0);
+  if(now - H.lastEmit > 1500) emitState();
+}
+
+function publicState(){
+  const G = H.G;
+  const s = { hid:H.hid, seq:++H.seq, ph:G.phase, rd:G.round, rem: G.endsAt ? Math.max(0,G.endsAt-Date.now()) : 0 };
+  const pl = G.phase==="lobby" ? lobbyPlayers() : G.players;
+  s.pl = pl.map(p=>[p.pid, p.name, H.colorOf[p.pid]||COLORS[0]]);
+  if(G.phase==="answer"){ s.rk = G.rk; s.pr = G.prompts.map(p=>[p.id,p.t,p.a,p.b]); }
+  if((G.phase==="vote"||G.phase==="reveal") && cur()){ const m=cur(); s.m = { k:G.vk, t:m.t, x:side(m,"x").text, y:side(m,"y").text, au:[m.a,m.b] }; }
+  if(G.phase==="fanswer"){ s.fk = G.final.fk; s.ft = G.final.t; }
+  if(G.phase==="fvote"){ s.fk = G.final.fk; s.ft = G.final.t; s.fo = G.final.opts.map(o=>[o.i,o.t,o.pid]); }
+  if(["scores","freveal","end","reveal"].includes(G.phase)) s.sc = G.scores;
+  return s;
+}
+function emitState(){
+  if(!H.nr || !H.G) return;
+  H.lastEmit = Date.now();
+  H.nr.emit("state", publicState());
+}
+
+function updateTimer(ms){
+  const el = document.getElementById("timer"); if(!el) return;
+  const t = ms>0 ? String(Math.ceil(ms/1000)) : "";
+  if(el.textContent !== t) el.textContent = t;
+}
+
+function hostKey(){
+  const G = H.G; let prog = "";
+  if(G.phase==="lobby") prog = lobbyPlayers().map(p=>p.pid+p.name).join(",");
+  else if(G.phase==="answer") prog = G.players.map(p=>answeredCount(p.pid)).join("");
+  else if(G.phase==="vote") prog = votedPids().join(",");
+  else if(G.phase==="fanswer") prog = G.players.map(p=>ansOf(p.pid,G.final.fk,"f")?1:0).join("");
+  else if(G.phase==="fvote") prog = G.players.map(p=>finalVote(p.pid)?1:0).join("");
+  const on = G.players.map(p=>isOn(p.pid)?1:0).join("");
+  return [G.phase,G.round,G.mi,prog,on].join("|");
+}
+function hostRender(force){
+  if(!H.G) return;
+  const k = hostKey(); if(!force && k===H.viewKey) return;
+  H.viewKey = k; mount(hostView()); updateTimer(H.G.endsAt ? H.G.endsAt-Date.now() : 0);
+}
+function statusList(done){
+  return h("ul",{class:"status"}, H.G.players.map(p=>h("li",{class:(done(p.pid)?"done ":"")+(isOn(p.pid)?"":"gone"),style:"--c:"+p.color}, p.name)));
+}
+function board(){
+  const G = H.G;
+  const rows = [...G.players].sort((a,b)=>(G.scores[b.pid]||0)-(G.scores[a.pid]||0));
+  return h("ol",{class:"board"}, rows.map((p,i)=>h("li",{style:"--c:"+p.color}, h("span",{class:"rank"},String(i+1)), p.name, h("span",{class:"sc"}, String(G.scores[p.pid]||0)))));
+}
+function ansCard(cls, info, showMeta){
+  return h("div",{class:"ans "+cls+(info.text?"":" none")},
+    h("div",{}, info.text || "No answer"),
+    showMeta ? h("div",{class:"who"}, nameOf(info.pid)) : null,
+    showMeta ? h("div",{class:"pts"}, "+"+(info.pts||0)) : null,
+    showMeta && info.votes && info.votes.length ? h("div",{class:"votes"}, "Votes from "+info.votes.join(", ")) : null);
+}
+function hostView(){
+  const G = H.G;
+  const skippable = G.endsAt && !["lobby","end"].includes(G.phase);
+  const top = h("header",{class:"hbar"},
+    h("div",{class:"logo"},"Zingers"),
+    h("div",{class:"code"},"Room ", h("b",{},H.code)),
+    h("div",{id:"timer",class:"timer","aria-live":"off"}),
+    skippable ? h("button",{class:"ghost small",onclick:()=>{ if(H.G.endsAt) H.G.endsAt = Date.now(); }},"Skip") : null);
+  let body;
+  switch(G.phase){
+    case "lobby": {
+      const players = lobbyPlayers(), need = 3-players.length;
+      body = h("section",{class:"stage"},
+        h("p",{class:"lead"},"Scan to join, or go to ", h("span",{class:"url"}, prettyUrl(H.code).replace(/\?room=.*$/,"")), " and enter"),
+        h("div",{class:"joinbox"},
+          H.qr ? h("div",{html:H.qr}) : null,
+          h("div",{class:"bigcode","aria-label":"Room code "+H.code.split("").join(" ")},H.code)),
+        players.length ? h("ul",{class:"chips"}, players.map(p=>h("li",{style:"--c:"+H.colorOf[p.pid]},p.name))) : h("p",{class:"muted"},"Waiting for players. 3 to 8 can play."),
+        h("div",{class:"row"},
+          h("button",{class:"primary big",disabled: need>0, onclick:startGame}, need>0 ? `Need ${need} more` : "Start game")),
+        h("p",{class:"muted",style:"font-size:.95rem"},"Keep this tab open. It runs the game."));
+      break;
+    }
+    case "intro":
+      body = h("section",{class:"stage"}, h("h2",{class:"huge"}, "Round "+G.round), h("p",{class:"lead"}, G.round===2 ? "Double points. Check your phone for two new prompts." : "Check your phone. You get two prompts, and each one is also going to a rival."));
+      break;
+    case "answer":
+      body = h("section",{class:"stage"}, h("h2",{class:"huge"},"Answer on your phone"), h("p",{class:"lead muted"},"Short and sharp wins. Nobody sees who wrote what until the votes are in."), statusList(pid=>answeredCount(pid)>=tasksOf(pid).length));
+      break;
+    case "vote": case "reveal": {
+      const m = cur(), R = G.phase==="reveal" ? G.reveal : null;
+      const X = R ? R.x : side(m,"x"), Y = R ? R.y : side(m,"y");
+      const n = voters(m).length, v = G.phase==="vote" ? votedPids().length : 0;
+      body = h("section",{class:"stage"},
+        h("div",{class:"marquee"}, m.t),
+        h("div",{class:"duel"}, ansCard("x",X,!!R), h("div",{class:"vs"},"vs"), ansCard("y",Y,!!R)),
+        R ? (R.zinger ? h("p",{class:"banner"},"Zinger!") : (R.forfeit ? h("p",{class:"lead"},"Win by forfeit.") : null))
+          : h("p",{class:"lead"}, `Vote on your phone. ${v} of ${n} in.`));
+      break;
+    }
+    case "scores":
+      body = h("section",{class:"stage"}, h("h2",{class:"huge"}, G.round<2 ? "After round 1" : "After round 2"), board());
+      break;
+    case "fintro":
+      body = h("section",{class:"stage"}, h("h2",{class:"huge"},"The final"), h("p",{class:"lead"},"Everyone answers the same prompt. Every vote is worth 300."));
+      break;
+    case "fanswer":
+      body = h("section",{class:"stage"}, h("div",{class:"marquee"}, G.final.t), h("p",{class:"lead"},"Everyone answers on their phone."), statusList(pid=>!!ansOf(pid,G.final.fk,"f")));
+      break;
+    case "fvote":
+      body = h("section",{class:"stage"}, h("div",{class:"marquee"}, G.final.t),
+        h("div",{class:"fgrid"}, G.final.opts.map(o=>h("div",{class:"ans"}, h("span",{class:"num"},String(o.i+1)), h("div",{},o.t)))),
+        h("p",{class:"lead"},"Vote for your favourite on your phone."), statusList(pid=>!!finalVote(pid)));
+      break;
+    case "freveal":
+      body = h("section",{class:"stage"}, h("div",{class:"marquee"}, G.final.t),
+        h("div",{class:"fgrid"}, [...G.final.res].sort((a,b)=>b.votes.length-a.votes.length).map(o=>h("div",{class:"ans"},
+          h("div",{},o.t), h("div",{class:"who"},nameOf(o.pid)), h("div",{class:"pts"},"+"+o.pts),
+          o.votes.length ? h("div",{class:"votes"},"Votes from "+o.votes.join(", ")) : null))));
+      break;
+    case "end": {
+      const top = [...G.players].sort((a,b)=>(G.scores[b.pid]||0)-(G.scores[a.pid]||0))[0];
+      body = h("section",{class:"stage"}, h("p",{class:"banner"}, top ? top.name+" wins" : "Game over"), board(),
+        h("div",{class:"row"}, h("button",{class:"primary big",onclick:playAgain},"Play again")));
+      break;
+    }
+  }
+  return h("main",{class:"host"}, top, body);
+}
+
+/* ======================================================================
+   PLAYER
+   ====================================================================== */
+const P = { nr:null, code:"", pid:"", name:"", st:null, hid:null, seq:0, localEnd:0, lastSeen:0, viewKey:"", ans:{r:"",a:{}}, voted:"", link:"up" };
+
+async function playerJoin(code, name){
+  if(busy) return;
+  let pid = store.get("zing-pid"); if(!pid){ pid = rid(); store.set("zing-pid",pid); }
+  store.set("zing-name",name); store.set("zing-code",code);
+  P.code = code; P.name = name; P.pid = pid;
+  busy = true; renderHome();
+  try{ P.nr = await Net.join(code, s=>{ P.link = s; playerTick(); }); }
+  catch(e){ busy = false; return renderHome(netError(e && e.code || "error")); }
+  busy = false;
+  try{ const saved = JSON.parse(store.get("zing-state")||"null"); if(saved && saved.code===code){ P.ans = saved.ans||P.ans; P.voted = saved.voted||""; P.lastVote = saved.lastVote||null; } }catch(e){}
+  P.nr.presence(P.lastVote ? {role:"player", pid, name, ans:P.ans, vote:P.lastVote} : {role:"player", pid, name, ans:P.ans});
+  P.nr.on("state", msg=>{ if(msg.sameTab) return; onState(msg.data); });
+  setInterval(playerTick, 250);
+  playerRender(true);
+}
+function onState(d){
+  if(!d || typeof d!=="object" || typeof d.hid!=="string") return;
+  if(d.hid !== P.hid){ P.hid = d.hid; P.seq = 0; }
+  if(typeof d.seq!=="number" || d.seq <= P.seq) return;
+  P.seq = d.seq; P.st = d; P.lastSeen = Date.now();
+  P.localEnd = d.rem ? Date.now()+Number(d.rem) : 0;
+  playerRender(false);
+}
+function playerTick(){
+  const t = document.getElementById("ptimer");
+  if(t){ const ms = P.localEnd - Date.now(); const s = ms>0 ? String(Math.ceil(ms/1000)) : ""; if(t.textContent!==s) t.textContent = s; }
+  const l = document.getElementById("lost");
+  if(l){ const msg = (P.link==="down" || (P.st && Date.now()-P.lastSeen > 8000)) ? "Lost the host screen. Reconnecting…" : ""; if(l.textContent!==msg) l.textContent = msg; }
+}
+function me(){ const s=P.st; return s && Array.isArray(s.pl) ? s.pl.find(p=>p[0]===P.pid) : null; }
+function myTasks(){ const s=P.st; return (Array.isArray(s.pr)?s.pr:[]).filter(p=>p[2]===P.pid||p[3]===P.pid); }
+function nextTask(){ const s=P.st; return myTasks().find(p=>!(P.ans.r===s.rk && P.ans.a[p[0]])); }
+function submitAns(key, id, text){
+  text = clean(text,60); if(!text) return;
+  if(P.ans.r !== key) P.ans = { r:key, a:{} };
+  P.ans.a[id] = text;
+  P.nr.presence({ ans: P.ans }); saveP();
+  playerRender(true);
+}
+function castVote(key, v){ P.voted = key; P.lastVote = { k:key, v }; P.nr.presence({ vote:{ k:key, v } }); saveP(); playerRender(true); }
+function saveP(){ store.set("zing-state", JSON.stringify({ code:P.code, ans:P.ans, voted:P.voted, lastVote:P.lastVote||null })); }
+
+function playerKey(){
+  const s = P.st; if(!s) return "wait";
+  const k = [s.hid, s.ph, s.rd, me()?1:0];
+  if(s.ph==="answer"){ const t = nextTask(); k.push(s.rk, t ? t[0] : "done"); }
+  if(s.ph==="vote"||s.ph==="reveal") k.push(s.m && s.m.k, P.voted===(s.m&&s.m.k) ? 1:0);
+  if(s.ph==="fanswer") k.push(s.fk, (P.ans.r===s.fk && P.ans.a.f) ? 1:0);
+  if(s.ph==="fvote") k.push(s.fk, P.voted===s.fk ? 1:0);
+  if(s.sc) k.push(JSON.stringify(s.sc));
+  if(s.ph==="lobby") k.push((s.pl||[]).length);
+  return k.join("|");
+}
+function playerRender(force){
+  const k = playerKey(); if(!force && k===P.viewKey) return;
+  P.viewKey = k; mount(playerView()); playerTick();
+  const f = app.querySelector("input,.pick"); if(f && f.tagName==="INPUT") f.focus();
+}
+function answerForm(key, id, promptText, label){
+  const inp = h("input",{maxlength:"60",autocomplete:"off",enterkeyhint:"send","aria-label":"Your answer",placeholder:"Your answer"});
+  const send = ()=>submitAns(key,id,inp.value);
+  inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); send(); } });
+  return [ label ? h("p",{class:"count muted"},label) : null, h("div",{class:"pprompt"},promptText), inp, h("button",{class:"primary big",onclick:send},"Send answer") ];
+}
+function myScoreLine(){
+  const s=P.st; if(!s.sc) return null;
+  const rows = Object.entries(s.sc).sort((a,b)=>b[1]-a[1]);
+  const i = rows.findIndex(r=>r[0]===P.pid); if(i<0) return null;
+  return h("p",{class:"lead"}, `You're ${i+1}${["st","nd","rd"][i]||"th"} with ${rows[i][1]} points.`);
+}
+function playerView(){
+  const s = P.st, m = me();
+  const color = m ? m[2] : "var(--line)";
+  const bar = h("div",{class:"pbar"}, h("span",{class:"me",style:"--c:"+color}, P.name), h("span",{class:"muted"},"Room "+P.code), h("span",{id:"ptimer",class:"timer"}));
+  let body;
+  if(!s) body = [h("h2",{},"You're in the room"), h("p",{class:"muted"},"Waiting for the host screen to say hello…")];
+  else if(!m && s.ph!=="lobby") body = [h("h2",{},"A game is running"), h("p",{class:"muted"},"You'll be in the next one. Enjoy the show.")];
+  else switch(s.ph){
+    case "lobby": body = [h("h2",{}, m ? "You're in!" : "Joining…"), h("p",{class:"muted"}, m ? `${(s.pl||[]).length} player${(s.pl||[]).length===1?"":"s"} so far. Watch the big screen, the host starts the game.` : "The room is full (8 players max) or still catching up.")]; break;
+    case "intro": body = [h("h2",{},"Round "+s.rd), h("p",{class:"muted"},"Prompts incoming.")]; break;
+    case "fintro": body = [h("h2",{},"The final"), h("p",{class:"muted"},"One prompt, everyone answers.")]; break;
+    case "answer": {
+      const t = nextTask(), all = myTasks();
+      body = t ? answerForm(s.rk, t[0], t[1], all.length>1 ? `Prompt ${all.indexOf(t)+1} of ${all.length}` : "")
+               : [h("h2",{},"Answers in"), h("p",{class:"muted"},"Watch the screen while the others finish.")];
+      break;
+    }
+    case "vote": {
+      const mm = s.m || {};
+      if(Array.isArray(mm.au) && mm.au.includes(P.pid)) body = [h("h2",{},"That's your matchup"), h("p",{class:"muted"},"No voting on this one. Try to keep a straight face.")];
+      else if(P.voted===mm.k) body = [h("h2",{},"Vote in"), h("p",{class:"muted"},"Eyes on the screen.")];
+      else body = [h("div",{class:"pprompt"}, mm.t||""), h("p",{class:"muted"},"Which one's funnier?"),
+        h("button",{class:"pick x",onclick:()=>castVote(mm.k,"x")}, mm.x||""),
+        h("button",{class:"pick y",onclick:()=>castVote(mm.k,"y")}, mm.y||"")];
+      break;
+    }
+    case "fanswer":
+      body = (P.ans.r===s.fk && P.ans.a.f) ? [h("h2",{},"Answer in"), h("p",{class:"muted"},"Waiting for everyone else.")] : answerForm(s.fk, "f", s.ft, "Final prompt");
+      break;
+    case "fvote": {
+      const opts = (Array.isArray(s.fo)?s.fo:[]).filter(o=>o[2]!==P.pid);
+      body = P.voted===s.fk ? [h("h2",{},"Vote in"), h("p",{class:"muted"},"Eyes on the screen.")]
+        : [h("div",{class:"pprompt"}, s.ft||""), h("p",{class:"muted"},"Pick your favourite. You can't vote for your own."),
+           opts.map((o,i)=>h("button",{class:"pick "+(i%2?"y":"x"),onclick:()=>castVote(s.fk,o[0])}, o[1]))];
+      break;
+    }
+    case "end": body = [h("h2",{},"Game over"), myScoreLine(), h("p",{class:"muted"},"Stay here if the host starts another round.")]; break;
+    default: body = [h("h2",{},"Eyes on the screen"), myScoreLine()];
+  }
+  return h("main",{class:"player"}, bar, h("p",{id:"lost",class:"lost",role:"status"}), h("section",{class:"pstage"}, body));
+}
+
+/* ---------- boot ---------- */
+renderHome();
+})();
+</script>
+</body>
+</html>
