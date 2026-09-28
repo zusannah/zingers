@@ -281,6 +281,7 @@ function lang(){
     const p = store.get("zing-plang"); if(p==="en" || p==="nl") return p;
     if(P.st && (P.st.lg==="nl" || P.st.lg==="en")) return P.st.lg;   /* players follow the host until they pick */
   }
+  if(typeof H!=="undefined" && H.nr && H.lang) return H.lang;   /* a hosting tab keeps its own language; other tabs can't change it */
   const s = store.get("zing-lang"); if(s==="en" || s==="nl") return s;
   return deviceLang;
 }
@@ -294,7 +295,7 @@ function langButton(){
   return h("button",{class:"ghost small langbtn",lang:other,title:t("switchLang"),"aria-label":t("switchLang"),onclick:()=>setLang(other)}, other.toUpperCase());
 }
 function setLang(l){
-  if(playerMode()) store.set("zing-plang", l); else store.set("zing-lang", l);
+  if(playerMode()) store.set("zing-plang", l); else { store.set("zing-lang", l); if(H.nr) H.lang = l; }
   if(H.nr && H.G){ refillPool(); emitState(); }
   if(screen==="home" || (!H.nr && !P.nr)) renderHome(); else if(H.nr) hostRender(true); else playerRender(true);
 }
@@ -324,7 +325,7 @@ const Net = {
       const peer = new Peer(PEER_PREFIX+code.toLowerCase(), PEER_OPTS);
       const conns = new Map();           // connectionId -> {conn, presence}
       let peersCb = ()=>{}; let opened = false;
-      const peers = ()=>[...conns.values()].filter(c=>c.presence).map(c=>({presence:c.presence}));
+      const peers = ()=>[...conns.values()].filter(c=>c.presence).map(c=>({presence:c.presence, get seen(){ return c.seen; }, get hb(){ return c.hb; }}));
       const fire = (joined)=>{ try{ peersCb({ peers:peers(), joined: joined?[joined]:[] }); }catch(e){} };
       peer.on("open", ()=>{ opened = true; resolve(room); });
       peer.on("error", err=>{
@@ -332,10 +333,13 @@ const Net = {
       });
       peer.on("disconnected", ()=>{ setTimeout(()=>{ try{ if(!peer.destroyed) peer.reconnect(); }catch(e){} }, 1500); });
       peer.on("connection", conn=>{
-        const rec = { conn, presence:null };
+        const rec = { conn, presence:null, seen:Date.now(), hb:false };
         conns.set(conn.connectionId, rec);
         conn.on("data", msg=>{
           if(!msg || typeof msg!=="object") return;
+          rec.seen = Date.now();
+          if(msg.t==="h"){ rec.hb = true; return; }                                 /* heartbeat */
+          if(msg.t==="bye"){ if(conns.delete(conn.connectionId)) fire(null); try{ conn.close(); }catch(e){} return; }
           if(msg.t==="p" && msg.d && typeof msg.d==="object"){
             const first = !rec.presence;
             rec.presence = msg.d;
@@ -386,6 +390,8 @@ const Net = {
         c.on("error", ()=>{});
       }
       peer.on("open", connect);
+      const beat = setInterval(()=>{ if(peer.destroyed){ clearInterval(beat); return; } if(conn && conn.open){ try{ conn.send({t:"h"}); }catch(e){} } }, 3000);
+      window.addEventListener("pagehide", e=>{ if(!e.persisted && conn && conn.open){ try{ conn.send({t:"bye"}); }catch(err){} } });
       peer.on("error", err=>{
         const t = err && err.type;
         if(t==="peer-unavailable"){
@@ -406,7 +412,7 @@ const Net = {
         onPeers(){},
         emit(){ return Promise.resolve(); },
         on(name, fn){ (handlers[name] = handlers[name]||[]).push(fn); },
-        close(){ try{ peer.destroy(); }catch(e){} }
+        close(){ try{ if(conn && conn.open) conn.send({t:"bye"}); }catch(e){} setTimeout(()=>{ try{ peer.destroy(); }catch(e){} }, 150); }
       };
     });
   }
@@ -458,7 +464,7 @@ function resumeBanner(){
     h("p",{class:"muted",style:"font-size:.9rem;margin:.8em 0 0"}, H.nr ? t("resumeNoteHost") : t("resumeNotePlayer")));
 }
 function leaveSession(){
-  if(H.nr){ try{ H.nr.close(); }catch(e){} Snd.stopMusic(); clearBots(); H.bots = []; H.botUsed = new Set(); H.nr = null; H.G = null; H.peers = []; H.memo = {ans:{},vote:{}}; H.colorOf = {}; H.used = new Set(); H.viewKey = ""; H.hid = rid(); H.seq = 0; }
+  if(H.nr){ try{ H.nr.close(); }catch(e){} Snd.stopMusic(); clearBots(); H.bots = []; H.botUsed = new Set(); H.nr = null; H.G = null; H.peers = []; H.memo = {ans:{},vote:{}}; H.colorOf = {}; H.used = new Set(); H.viewKey = ""; H.hid = rid(); H.seq = 0; H.lang = null; }
   if(P.nr){ try{ P.nr.close(); }catch(e){} P.nr = null; P.st = null; P.hid = null; P.seq = 0; P.localEnd = 0; P.lastSeen = 0; P.viewKey = ""; P.ans = {r:"",a:{}}; P.voted = ""; P.lastVote = null; P.link = "up"; }
 }
 
@@ -535,6 +541,7 @@ async function hostCreate(spice, own){
   busy = false;
   if(!nr) return renderHome(netError(lastErr && lastErr.code || "error"));
   leaveSession();
+  H.lang = lang();
   H.nr = nr; H.code = code; H.qr = qrSvg(joinUrl(code)); screen = "game";
   H.nr.onPeers(ch=>{ H.peers = ch.peers; absorb(); reclaim(); progressSound(); if(ch.joined.length) emitState(); hostTick(); hostRender(false); });
   H.G = newGame();
@@ -645,9 +652,11 @@ function lobbyPlayers(){
   }
   return [...seen.values(), ...H.bots].slice(0,8);
 }
+const AWAY_MS = 15000;   /* a phone that stops checking in for this long isn't waited for any more */
+function alive(p){ return !p.hb || Date.now() - (p.seen||0) < AWAY_MS; }
 function presOf(pid){
   let found = null;
-  for(const p of H.peers){ const pr=p.presence||{}; if(pr.role==="player" && pr.pid===pid) found = pr; }
+  for(const p of H.peers){ const pr=p.presence||{}; if(pr.role==="player" && pr.pid===pid && alive(p)) found = pr; }
   return found;
 }
 function isOn(pid){ return isBot(pid) || !!presOf(pid); }
@@ -854,6 +863,7 @@ function hostTick(){
   }
   updateTimer(remaining());
   countdownSound();
+  if(now - (H.lastCheck||0) > 1000){ H.lastCheck = now; hostRender(false); }
   if(now - H.lastEmit > 1500) emitState();
 }
 
