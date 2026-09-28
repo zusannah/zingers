@@ -65,6 +65,8 @@ summary{cursor:pointer;font-weight:600}
 .host{flex:1;display:flex;flex-direction:column;padding:clamp(12px,2.5vw,32px);gap:12px}
 .hbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .logo{font-size:1.6rem;color:var(--pink)}
+.langfix{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:16px;z-index:5}
+.langbtn{min-width:3.2em;font-weight:800;letter-spacing:.06em}
 .linklike{background:none;border:0;padding:0;cursor:pointer;font-family:Bungee, Impact, sans-serif;font-weight:400;border-radius:8px}
 .pbar .logo{font-size:1.05rem}
 .resume{border-color:var(--pink);margin:0 0 20px}
@@ -113,6 +115,7 @@ summary{cursor:pointer;font-weight:600}
 .pbar{display:flex;align-items:center;gap:10px}
 .pbar .me{font-weight:800;border:3px solid var(--c,var(--line));border-radius:999px;padding:.2em .8em}
 .pbar .timer{margin-left:auto;font-size:1.3rem}
+.pbar > .muted{white-space:nowrap;font-size:.9rem}
 .pstage{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px}
 .pstage h2{font-size:1.6rem;margin:0;line-height:1.1}
 .pprompt{font-size:1.4rem;font-weight:800;line-height:1.25;background:var(--card);border:3px dotted var(--line);border-radius:16px;padding:16px}
@@ -129,6 +132,7 @@ summary{cursor:pointer;font-weight:600}
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js" integrity="sha384-x0YgkOr/3UOZP2CRDxGW9e0Q+2Qjyr3uJrm4xU32Y7ZCNAo7Cc7bjhrZMi/dwczu" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/dist/qrcode.js" integrity="sha384-e9EFD6BGC90bkW9aDV5xbbBfzwN7G8YImHao2lfLVKV/hPB0E0go+H3I64h7oHtA" crossorigin="anonymous"></script>
 <script src="prompts.js"></script>
+<script src="i18n.js"></script>
 <script src="sound.js"></script>
 <script>
 (function(){
@@ -152,7 +156,7 @@ function h(tag, attrs, ...kids){
   }
   return e;
 }
-function mount(node){ app.replaceChildren(node); }
+function mount(node){ document.documentElement.lang = lang(); app.replaceChildren(node); }
 function clean(s, n){
   return String(s==null?"":s)
     .replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g,"")
@@ -181,7 +185,29 @@ function startTicker(fn){
 }
 const COLORS = ["#FF4F8B","#22C7B8","#FFC83D","#9B8CFF","#FF8A3D","#5ED36B","#4FB3FF","#F27BF2"];
 const T = { answer:90000, vote:20000, reveal:7000, scores:8000, intro:4500, fanswer:75000, fvote:30000, freveal:12000 };
-const BANK = window.ZINGERS_PROMPTS || { clean:[], cheeky:[], finals:[] };
+const BANK_EN = window.ZINGERS_PROMPTS || { clean:[], cheeky:[], finals:[] };
+/* ---------- language ---------- */
+const DICT = window.ZING_I18N || { en:{} };
+const deviceLang = /^nl/i.test(navigator.language || "") ? "nl" : "en";
+function lang(){
+  const s = store.get("zing-lang"); if(s==="en" || s==="nl") return s;
+  if(typeof P!=="undefined" && P.nr && P.st && (P.st.lg==="nl" || P.st.lg==="en")) return P.st.lg;   /* players follow the host until they pick */
+  return deviceLang;
+}
+function t(k, ...a){
+  let v = (DICT[lang()]||{})[k]; if(v==null) v = (DICT.en||{})[k]; if(v==null) return k;
+  return typeof v==="function" ? v(...a) : v;
+}
+function bank(){ return lang()==="nl" && window.ZINGERS_PROMPTS_NL ? window.ZINGERS_PROMPTS_NL : BANK_EN; }
+function langButton(){
+  const other = lang()==="nl" ? "en" : "nl";
+  return h("button",{class:"ghost small langbtn",lang:other,title:t("switchLang"),"aria-label":t("switchLang"),onclick:()=>setLang(other)}, other.toUpperCase());
+}
+function setLang(l){
+  store.set("zing-lang", l);
+  if(H.nr && H.G){ refillPool(); emitState(); }
+  if(screen==="home" || (!H.nr && !P.nr)) renderHome(); else if(H.nr) hostRender(true); else playerRender(true);
+}
 function joinUrl(code){ const u = new URL(location.href); u.search = ""; u.hash = ""; u.searchParams.set("room", code); return u.toString(); }
 function prettyUrl(code){ return joinUrl(code).replace(/^https?:\/\//,""); }
 function qrSvg(text){
@@ -296,13 +322,8 @@ const Net = {
   }
 };
 function netError(code){
-  return ({
-    no_room:"No game with that code. Check the big screen and try again.",
-    timeout:"Couldn't reach the host screen. Make sure it's open, then try again.",
-    taken:"That room code is busy. Try again.",
-    no_network_lib:"The game couldn't load its network code. Refresh the page.",
-    "browser-incompatible":"This browser can't run the game. Try Chrome, Safari or Firefox."
-  })[code] || "Connection problem ("+code+"). Refresh and try again.";
+  const k = "err_"+code; const v = t(k);
+  return v===k ? t("errGeneric", code) : v;
 }
 
 /* ---------- home ---------- */
@@ -330,7 +351,7 @@ function countdownSound(){
   } else H.lastSec = 0;
 }
 function soundButton(){
-  const label = m=>m ? "Unmute" : "Mute";
+  const label = m=>m ? t("unmute") : t("mute");
   return h("button",{class:"ghost small","aria-pressed":String(Snd.isMuted()),onclick:e=>{ const m = Snd.toggle(); e.currentTarget.textContent = label(m); e.currentTarget.setAttribute("aria-pressed",String(m)); }}, label(Snd.isMuted()));
 }
 
@@ -339,12 +360,12 @@ let screen = "game";
 function goHome(){ screen = "home"; renderHome(); window.scrollTo(0,0); }
 function backToGame(){ screen = "game"; if(H.nr) hostRender(true); else if(P.nr) playerRender(true); }
 function resumeBanner(){
-  const label = H.nr ? "You're hosting room "+H.code+"." : (P.nr ? "You're in room "+P.code+" as "+P.name+"." : "");
+  const label = H.nr ? t("resumeHost", H.code) : (P.nr ? t("resumePlayer", P.code, P.name) : "");
   if(!label) return null;
   return h("section",{class:"pane resume"},
     h("p",{style:"font-weight:800"}, label),
-    h("button",{class:"primary big",onclick:backToGame}, "Back to game"),
-    h("p",{class:"muted",style:"font-size:.9rem;margin:.8em 0 0"}, H.nr ? "Hosting or joining another game from here ends this one for everyone." : "Joining or hosting another game from here leaves this one."));
+    h("button",{class:"primary big",onclick:backToGame}, t("backToGame")),
+    h("p",{class:"muted",style:"font-size:.9rem;margin:.8em 0 0"}, H.nr ? t("resumeNoteHost") : t("resumeNotePlayer")));
 }
 function leaveSession(){
   if(H.nr){ try{ H.nr.close(); }catch(e){} Snd.stopMusic(); H.nr = null; H.G = null; H.peers = []; H.memo = {ans:{},vote:{}}; H.colorOf = {}; H.used = new Set(); H.viewKey = ""; H.hid = rid(); H.seq = 0; }
@@ -355,44 +376,45 @@ function renderHome(err){
   const savedName = store.get("zing-name")||"";
   const savedCode = urlRoom || store.get("zing-code")||"";
   const codeIn = h("input",{id:"jcode",maxlength:"4",autocomplete:"off",autocapitalize:"characters",placeholder:"ABCD",value:savedCode,style:"text-transform:uppercase;letter-spacing:.2em"});
-  const nameIn = h("input",{id:"jname",maxlength:"16",autocomplete:"nickname",placeholder:"Your name",value:savedName});
-  const spiceIn = h("select",{id:"hspice"}, h("option",{value:"clean"},"Clean"), h("option",{value:"cheeky"},"Cheeky"));
-  const ownIn = h("textarea",{id:"hown",maxlength:"4000",placeholder:"One per line, e.g.\nThe real reason Tom is always late\nA terrible name for our group chat"});
+  const nameIn = h("input",{id:"jname",maxlength:"16",autocomplete:"nickname",placeholder:t("namePh"),value:savedName});
+  const spiceIn = h("select",{id:"hspice"}, h("option",{value:"clean"},t("clean")), h("option",{value:"cheeky"},t("cheeky")));
+  const ownIn = h("textarea",{id:"hown",maxlength:"4000",placeholder:t("ownPh")});
   const doJoin = ()=>{
     const code = clean(codeIn.value,4).toUpperCase(), name = clean(nameIn.value,16);
-    if(!/^[A-Z]{4}$/.test(code)) return renderHome("Enter the 4-letter code from the big screen.");
-    if(!name) return renderHome("Enter a name so people know who's winning.");
+    if(!/^[A-Z]{4}$/.test(code)) return renderHome(t("errCode"));
+    if(!name) return renderHome(t("errName"));
     playerJoin(code,name);
   };
   nameIn.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); doJoin(); } });
-  const joinBtn = h("button",{class:"primary",disabled:busy,onclick:doJoin}, busy ? "Connecting…" : "Join game");
+  const joinBtn = h("button",{class:"primary",disabled:busy,onclick:doJoin}, busy ? t("connecting") : t("joinBtn"));
   const hostBtn = h("button",{disabled:busy,onclick:()=>{
     const own = ownIn.value.split(/\n+/).map(s=>clean(s,120)).filter(s=>s.length>3).slice(0,60);
     hostCreate(spiceIn.value, own);
-  }}, "Host on this screen");
+  }}, t("hostBtn"));
   const joinPane = h("section",{class:"pane"},
-    h("h2",{},"Join"),
-    h("p",{class:"muted"},"Use the code shown on the host screen."),
-    h("label",{for:"jcode"},"Room code"), codeIn,
-    h("label",{for:"jname"},"Name"), nameIn,
+    h("h2",{},t("join")),
+    h("p",{class:"muted"},t("joinHelp")),
+    h("label",{for:"jcode"},t("roomCode")), codeIn,
+    h("label",{for:"jname"},t("name")), nameIn,
     joinBtn);
   const hostPane = h("section",{class:"pane"},
-    h("h2",{},"Host"),
-    h("p",{class:"muted"},"Put this on the TV, a laptop, or share it on a video call. Players join from their phones."),
-    h("label",{for:"hspice"},"Humour"), spiceIn,
-    h("details",{}, h("summary",{},"Add your own prompts (optional)"),
-      h("p",{class:"muted",style:"font-size:.9rem;margin:.5em 0"},"Inside jokes land best. These get used first."), ownIn),
+    h("h2",{},t("host")),
+    h("p",{class:"muted"},t("hostHelp")),
+    h("label",{for:"hspice"},t("humour")), spiceIn,
+    h("details",{}, h("summary",{},t("ownSummary")),
+      h("p",{class:"muted",style:"font-size:.9rem;margin:.5em 0"},t("ownHelp")), ownIn),
     hostBtn);
   mount(h("main",{class:"home"},
+    h("div",{class:"langfix"}, langButton()),
     h("h1",{},"Zingers"),
-    h("p",{class:"tag"},"A quick-wit party game. One screen hosts the show, everyone answers and votes on their phone, and the funniest answer wins."),
+    h("p",{class:"tag"},t("tag")),
     resumeBanner(),
     err ? h("p",{class:"warn",role:"alert"},err) : null,
     h("div",{class:"panes"}, urlRoom && !showHostPane ? [joinPane] : [joinPane, hostPane]),
-    urlRoom && !showHostPane ? h("p",{class:"fine"}, h("a",{href:location.pathname,style:"color:inherit",onclick:e=>{ e.preventDefault(); showHostPane = true; renderHome(); }},"Want to host your own game instead?")) : null,
-    h("p",{class:"fine muted"},"3 to 8 players. No accounts or installs. Phones connect straight to the host screen, so keep the host tab open for the whole game.")
+    urlRoom && !showHostPane ? h("p",{class:"fine"}, h("a",{href:location.pathname,style:"color:inherit",onclick:e=>{ e.preventDefault(); showHostPane = true; renderHome(); }},t("wantHost"))) : null,
+    h("p",{class:"fine muted"},t("fine"))
   ));
-  const focusEl = err && /name/.test(err) ? nameIn : (urlRoom && !savedName ? nameIn : (err ? codeIn : null));
+  const focusEl = err && err===t("errName") ? nameIn : (urlRoom && !savedName ? nameIn : (err ? codeIn : null));
   if(focusEl) focusEl.focus();
 }
 
@@ -403,11 +425,11 @@ const H = { nr:null, code:"", peers:[], G:null, hid:rid(), seq:0, pool:{prompts:
             spice:"clean", own:[], lastEmit:0, viewKey:"", colorOf:{}, qr:"", memo:{ans:{},vote:{}} };
 
 function newGame(){ return { phase:"lobby", round:0, players:[], scores:{}, prompts:[], matches:[], mi:0, endsAt:0, rk:"", vk:"", reveal:null, final:null }; }
-function basePrompts(){ return H.spice==="cheeky" ? [...BANK.clean, ...BANK.cheeky] : [...BANK.clean]; }
+function basePrompts(){ const B = bank(); return H.spice==="cheeky" ? [...B.clean, ...B.cheeky] : [...B.clean]; }
 function refillPool(){
   const own = shuffle(H.own.filter(t=>!H.used.has(t)));
   H.pool.prompts = [...own, ...shuffle(basePrompts().filter(t=>!own.includes(t)))];
-  H.pool.finals = shuffle(BANK.finals);
+  H.pool.finals = shuffle(bank().finals);
 }
 
 async function hostCreate(spice, own){
@@ -440,7 +462,7 @@ async function hostCreate(spice, own){
 function takeFrom(key, n){
   const out=[]; let guard=0;
   while(out.length<n && guard++<400){
-    if(!H.pool[key].length){ if(key==="prompts"){ H.pool.prompts = shuffle(basePrompts()); } else H.pool.finals = shuffle(BANK.finals); }
+    if(!H.pool[key].length){ if(key==="prompts"){ H.pool.prompts = shuffle(basePrompts()); } else H.pool.finals = shuffle(bank().finals); }
     const t = H.pool[key].shift();
     if(H.used.has(t) && guard<200) continue;
     H.used.add(t); out.push(t);
@@ -626,7 +648,7 @@ function hostTick(){
 
 function publicState(){
   const G = H.G;
-  const s = { hid:H.hid, seq:++H.seq, ph:G.phase, rd:G.round, rem: G.endsAt ? Math.max(0,G.endsAt-Date.now()) : 0 };
+  const s = { hid:H.hid, seq:++H.seq, lg:lang(), ph:G.phase, rd:G.round, rem: G.endsAt ? Math.max(0,G.endsAt-Date.now()) : 0 };
   const pl = G.phase==="lobby" ? lobbyPlayers() : G.players;
   s.pl = pl.map(p=>[p.pid, p.name, H.colorOf[p.pid]||COLORS[0]]);
   if(G.phase==="answer"){ s.rk = G.rk; s.pr = G.prompts.map(p=>[p.id,p.t,p.a,p.b]); s.dn = G.players.filter(p=>answeredCount(p.pid)>=tasksOf(p.pid).length).map(p=>p.pid); }
@@ -656,7 +678,7 @@ function hostKey(){
   else if(G.phase==="fanswer") prog = G.players.map(p=>ansOf(p.pid,G.final.fk,"f")?1:0).join("");
   else if(G.phase==="fvote") prog = G.players.map(p=>finalVote(p.pid)?1:0).join("");
   const on = G.players.map(p=>isOn(p.pid)?1:0).join("");
-  return [G.phase,G.round,G.mi,prog,on].join("|");
+  return [G.phase,G.round,G.mi,prog,on,lang()].join("|");
 }
 function hostRender(force){
   if(!H.G || screen!=="game") return;
@@ -673,40 +695,40 @@ function board(){
 }
 function ansCard(cls, info, showMeta){
   return h("div",{class:"ans "+cls+(info.text?"":" none")},
-    h("div",{}, info.text || "No answer"),
+    h("div",{}, info.text || t("noAnswer")),
     showMeta ? h("div",{class:"who"}, nameOf(info.pid)) : null,
     showMeta ? h("div",{class:"pts"}, "+"+(info.pts||0)) : null,
-    showMeta && info.votes && info.votes.length ? h("div",{class:"votes"}, "Votes from "+info.votes.join(", ")) : null);
+    showMeta && info.votes && info.votes.length ? h("div",{class:"votes"}, t("votesFrom", info.votes.join(", "))) : null);
 }
 function hostView(){
   const G = H.G;
   const skippable = G.endsAt && !["lobby","end"].includes(G.phase);
   const top = h("header",{class:"hbar"},
-    h("button",{class:"logo linklike",onclick:goHome,title:"Main menu","aria-label":"Zingers, back to main menu"},"Zingers"),
-    h("div",{class:"code"},"Room ", h("b",{},H.code)),
+    h("button",{class:"logo linklike",onclick:goHome,title:t("mainMenu"),"aria-label":t("logoAria")},"Zingers"),
+    h("div",{class:"code"},t("room")+" ", h("b",{},H.code)),
     h("div",{id:"timer",class:"timer","aria-live":"off"}),
-    skippable ? h("button",{class:"ghost small",onclick:()=>{ if(H.G.endsAt) H.G.endsAt = Date.now(); }},"Skip") : null,
-    soundButton());
+    skippable ? h("button",{class:"ghost small",onclick:()=>{ if(H.G.endsAt) H.G.endsAt = Date.now(); }},t("skip")) : null,
+    soundButton(), langButton());
   let body;
   switch(G.phase){
     case "lobby": {
       const players = lobbyPlayers(), need = 3-players.length;
       body = h("section",{class:"stage"},
-        h("p",{class:"lead"},"Scan to join, or go to ", h("span",{class:"url"}, prettyUrl(H.code).replace(/\?room=.*$/,"")), " and enter"),
+        h("p",{class:"lead"},t("scanJoin"), h("span",{class:"url"}, prettyUrl(H.code).replace(/\?room=.*$/,"")), t("andEnter")),
         h("div",{class:"joinbox"},
           H.qr ? h("div",{html:H.qr}) : null,
-          h("div",{class:"bigcode","aria-label":"Room code "+H.code.split("").join(" ")},H.code)),
-        players.length ? h("ul",{class:"chips"}, players.map(p=>h("li",{style:"--c:"+H.colorOf[p.pid]},p.name))) : h("p",{class:"muted"},"Waiting for players. 3 to 8 can play."),
+          h("div",{class:"bigcode","aria-label":t("roomCode")+" "+H.code.split("").join(" ")},H.code)),
+        players.length ? h("ul",{class:"chips"}, players.map(p=>h("li",{style:"--c:"+H.colorOf[p.pid]},p.name))) : h("p",{class:"muted"},t("waitingPlayers")),
         h("div",{class:"row"},
-          h("button",{class:"primary big",disabled: need>0, onclick:startGame}, need>0 ? `Need ${need} more` : "Start game")),
-        h("p",{class:"muted",style:"font-size:.95rem"},"Keep this tab open. It runs the game."));
+          h("button",{class:"primary big",disabled: need>0, onclick:startGame}, need>0 ? t("needMore", need) : t("startGame"))),
+        h("p",{class:"muted",style:"font-size:.95rem"},t("keepOpen")));
       break;
     }
     case "intro":
-      body = h("section",{class:"stage"}, h("h2",{class:"huge"}, "Round "+G.round), h("p",{class:"lead"}, G.round===2 ? "Double points. Check your phone for two new prompts." : "Check your phone. You get two prompts, and each one is also going to a rival."));
+      body = h("section",{class:"stage"}, h("h2",{class:"huge"}, t("round", G.round)), h("p",{class:"lead"}, G.round===2 ? t("r2lead") : t("r1lead")));
       break;
     case "answer":
-      body = h("section",{class:"stage"}, h("h2",{class:"huge"},"Answer on your phone"), h("p",{class:"lead muted"},"Short and sharp wins. Nobody sees who wrote what until the votes are in."), statusList(pid=>answeredCount(pid)>=tasksOf(pid).length));
+      body = h("section",{class:"stage"}, h("h2",{class:"huge"},t("answerOnPhone")), h("p",{class:"lead muted"},t("answerLead")), statusList(pid=>answeredCount(pid)>=tasksOf(pid).length));
       break;
     case "vote": case "reveal": {
       const m = cur(), R = G.phase==="reveal" ? G.reveal : null;
@@ -715,34 +737,34 @@ function hostView(){
       body = h("section",{class:"stage"},
         h("div",{class:"marquee"}, m.t),
         h("div",{class:"duel"}, ansCard("x",X,!!R), h("div",{class:"vs"},"vs"), ansCard("y",Y,!!R)),
-        R ? (R.zinger ? h("p",{class:"banner"},"Zinger!") : (R.forfeit ? h("p",{class:"lead"},"Win by forfeit.") : null))
-          : h("p",{class:"lead"}, `Vote on your phone. ${v} of ${n} in.`));
+        R ? (R.zinger ? h("p",{class:"banner"},t("zinger")) : (R.forfeit ? h("p",{class:"lead"},t("forfeit")) : null))
+          : h("p",{class:"lead"}, t("voteOnPhone", v, n)));
       break;
     }
     case "scores":
-      body = h("section",{class:"stage"}, h("h2",{class:"huge"}, G.round<2 ? "After round 1" : "After round 2"), board());
+      body = h("section",{class:"stage"}, h("h2",{class:"huge"}, t("afterRound", G.round<2 ? 1 : 2)), board());
       break;
     case "fintro":
-      body = h("section",{class:"stage"}, h("h2",{class:"huge"},"The final"), h("p",{class:"lead"},"Everyone answers the same prompt. Every vote is worth 300."));
+      body = h("section",{class:"stage"}, h("h2",{class:"huge"},t("theFinal")), h("p",{class:"lead"},t("finalLead")));
       break;
     case "fanswer":
-      body = h("section",{class:"stage"}, h("div",{class:"marquee"}, G.final.t), h("p",{class:"lead"},"Everyone answers on their phone."), statusList(pid=>!!ansOf(pid,G.final.fk,"f")));
+      body = h("section",{class:"stage"}, h("div",{class:"marquee"}, G.final.t), h("p",{class:"lead"},t("everyoneAnswers")), statusList(pid=>!!ansOf(pid,G.final.fk,"f")));
       break;
     case "fvote":
       body = h("section",{class:"stage"}, h("div",{class:"marquee"}, G.final.t),
         h("div",{class:"fgrid"}, G.final.opts.map(o=>h("div",{class:"ans"}, h("span",{class:"num"},String(o.i+1)), h("div",{},o.t)))),
-        h("p",{class:"lead"},"Vote for your favourite on your phone."), statusList(pid=>!!finalVote(pid)));
+        h("p",{class:"lead"},t("voteFav")), statusList(pid=>!!finalVote(pid)));
       break;
     case "freveal":
       body = h("section",{class:"stage freveal"}, h("div",{class:"marquee"}, G.final.t),
         h("div",{class:"fgrid"}, [...G.final.res].sort((a,b)=>a.votes.length-b.votes.length).map((o,i)=>h("div",{class:"ans",style:"--i:"+i},
           h("div",{},o.t), h("div",{class:"who"},nameOf(o.pid)), h("div",{class:"pts"},"+"+o.pts),
-          o.votes.length ? h("div",{class:"votes"},"Votes from "+o.votes.join(", ")) : null))));
+          o.votes.length ? h("div",{class:"votes"},t("votesFrom", o.votes.join(", "))) : null))));
       break;
     case "end": {
       const top = [...G.players].sort((a,b)=>(G.scores[b.pid]||0)-(G.scores[a.pid]||0))[0];
-      body = h("section",{class:"stage"}, h("p",{class:"banner"}, top ? top.name+" wins" : "Game over"), board(),
-        h("div",{class:"row"}, h("button",{class:"primary big",onclick:playAgain},"Play again")));
+      body = h("section",{class:"stage"}, h("p",{class:"banner"}, top ? t("wins", top.name) : t("gameOver")), board(),
+        h("div",{class:"row"}, h("button",{class:"primary big",onclick:playAgain},t("playAgain"))));
       break;
     }
   }
@@ -781,10 +803,10 @@ function onState(d){
   playerRender(false);
 }
 function playerTick(){
-  const t = document.getElementById("ptimer");
-  if(t){ const ms = P.localEnd - Date.now(); const s = ms>0 ? String(Math.ceil(ms/1000)) : ""; if(t.textContent!==s) t.textContent = s; }
+  const tEl = document.getElementById("ptimer");
+  if(tEl){ const ms = P.localEnd - Date.now(); const s = ms>0 ? String(Math.ceil(ms/1000)) : ""; if(tEl.textContent!==s) tEl.textContent = s; }
   const l = document.getElementById("lost");
-  if(l){ const msg = (P.link==="down" || (P.st && Date.now()-P.lastSeen > 8000)) ? "Lost the host screen. Reconnecting…" : ""; if(l.textContent!==msg) l.textContent = msg; }
+  if(l){ const msg = (P.link==="down" || (P.st && Date.now()-P.lastSeen > 8000)) ? t("lost") : ""; if(l.textContent!==msg) l.textContent = msg; }
 }
 function me(){ const s=P.st; return s && Array.isArray(s.pl) ? s.pl.find(p=>p[0]===P.pid) : null; }
 function myTasks(){ const s=P.st; return (Array.isArray(s.pr)?s.pr:[]).filter(p=>p[2]===P.pid||p[3]===P.pid); }
@@ -809,6 +831,7 @@ function playerKey(){
   if(s.sc) k.push(JSON.stringify(s.sc));
   if(Array.isArray(s.dn)) k.push(s.dn.join(","));
   if(s.ph==="lobby") k.push((s.pl||[]).length);
+  k.push(lang());
   return k.join("|");
 }
 function playerRender(force){
@@ -818,61 +841,61 @@ function playerRender(force){
   const f = app.querySelector("input,.pick"); if(f && f.tagName==="INPUT") f.focus();
 }
 function answerForm(key, id, promptText, label){
-  const inp = h("input",{maxlength:"60",autocomplete:"off",enterkeyhint:"send","aria-label":"Your answer",placeholder:"Your answer"});
+  const inp = h("input",{maxlength:"60",autocomplete:"off",enterkeyhint:"send","aria-label":t("yourAnswer"),placeholder:t("yourAnswer")});
   const send = ()=>submitAns(key,id,inp.value);
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); send(); } });
-  return [ label ? h("p",{class:"count muted"},label) : null, h("div",{class:"pprompt"},promptText), inp, h("button",{class:"primary big",onclick:send},"Send answer") ];
+  return [ label ? h("p",{class:"count muted"},label) : null, h("div",{class:"pprompt"},promptText), inp, h("button",{class:"primary big",onclick:send},t("send")) ];
 }
 function waitingLine(){
   const s = P.st, dn = Array.isArray(s.dn) ? s.dn : null;
   const left = dn ? (s.pl||[]).filter(p=>p[0]!==P.pid && !dn.includes(p[0])).map(p=>p[1]) : [];
-  const txt = left.length ? "Waiting for "+left.join(", ")+". Voting starts as soon as everyone's in." : "Everyone's in. Voting starts now.";
-  return [h("p",{class:"muted"},txt), h("p",{class:"muted",style:"font-size:.9rem"},"Your answers are saved, so it's fine if your screen locks.")];
+  const txt = left.length ? t("waitingFor", left.join(", ")) : t("allIn");
+  return [h("p",{class:"muted"},txt), h("p",{class:"muted",style:"font-size:.9rem"},t("savedNote"))];
 }
 function myScoreLine(){
   const s=P.st; if(!s.sc) return null;
   const rows = Object.entries(s.sc).sort((a,b)=>b[1]-a[1]);
   const i = rows.findIndex(r=>r[0]===P.pid); if(i<0) return null;
-  return h("p",{class:"lead"}, `You're ${i+1}${["st","nd","rd"][i]||"th"} with ${rows[i][1]} points.`);
+  return h("p",{class:"lead"}, t("scoreLine", i+1, rows[i][1]));
 }
 function playerView(){
   const s = P.st, m = me();
   const color = m ? m[2] : "var(--line)";
-  const bar = h("div",{class:"pbar"}, h("button",{class:"logo linklike",onclick:goHome,"aria-label":"Zingers, back to main menu"},"Zingers"), h("span",{class:"me",style:"--c:"+color}, P.name), h("span",{class:"muted"},"Room "+P.code), h("span",{id:"ptimer",class:"timer"}));
+  const bar = h("div",{class:"pbar"}, h("button",{class:"logo linklike",onclick:goHome,"aria-label":t("logoAria")},"Zingers"), h("span",{class:"me",style:"--c:"+color}, P.name), h("span",{class:"muted"},t("room")+" "+P.code), h("span",{id:"ptimer",class:"timer"}), langButton());
   let body;
-  if(!s) body = [h("h2",{},"You're in the room"), h("p",{class:"muted"},"Waiting for the host screen to say hello…")];
-  else if(!m && s.ph!=="lobby") body = [h("h2",{},"A game is running"), h("p",{class:"muted"},"You'll be in the next one. Enjoy the show.")];
+  if(!s) body = [h("h2",{},t("inRoom")), h("p",{class:"muted"},t("waitHost"))];
+  else if(!m && s.ph!=="lobby") body = [h("h2",{},t("running")), h("p",{class:"muted"},t("nextOne"))];
   else switch(s.ph){
-    case "lobby": body = [h("h2",{}, m ? "You're in!" : "Joining…"), h("p",{class:"muted"}, m ? `${(s.pl||[]).length} player${(s.pl||[]).length===1?"":"s"} so far. Watch the big screen, the host starts the game.` : "The room is full (8 players max) or still catching up.")]; break;
-    case "intro": body = [h("h2",{},"Round "+s.rd), h("p",{class:"muted"},"Prompts incoming.")]; break;
-    case "fintro": body = [h("h2",{},"The final"), h("p",{class:"muted"},"One prompt, everyone answers.")]; break;
+    case "lobby": body = [h("h2",{}, m ? t("youreIn") : t("joining")), h("p",{class:"muted"}, m ? t("lobbyCount", (s.pl||[]).length) : t("roomFull"))]; break;
+    case "intro": body = [h("h2",{},t("round", s.rd)), h("p",{class:"muted"},t("promptsIncoming"))]; break;
+    case "fintro": body = [h("h2",{},t("theFinal")), h("p",{class:"muted"},t("oneFinal"))]; break;
     case "answer": {
-      const t = nextTask(), all = myTasks();
-      body = t ? answerForm(s.rk, t[0], t[1], all.length>1 ? `Prompt ${all.indexOf(t)+1} of ${all.length}` : "")
-               : [h("h2",{},"Answers in"), waitingLine()];
+      const tk = nextTask(), all = myTasks();
+      body = tk ? answerForm(s.rk, tk[0], tk[1], all.length>1 ? t("promptXofY", all.indexOf(tk)+1, all.length) : "")
+               : [h("h2",{},t("answersIn")), waitingLine()];
       break;
     }
     case "vote": {
       const mm = s.m || {};
-      if(Array.isArray(mm.au) && mm.au.includes(P.pid)) body = [h("h2",{},"That's your matchup"), h("p",{class:"muted"},"No voting on this one. Try to keep a straight face.")];
-      else if(P.voted===mm.k) body = [h("h2",{},"Vote in"), h("p",{class:"muted"},"Eyes on the screen.")];
-      else body = [h("div",{class:"pprompt"}, mm.t||""), h("p",{class:"muted"},"Which one's funnier?"),
+      if(Array.isArray(mm.au) && mm.au.includes(P.pid)) body = [h("h2",{},t("yourMatch")), h("p",{class:"muted"},t("noVoteHere"))];
+      else if(P.voted===mm.k) body = [h("h2",{},t("voteIn")), h("p",{class:"muted"},t("eyesScreen"))];
+      else body = [h("div",{class:"pprompt"}, mm.t||""), h("p",{class:"muted"},t("funnier")),
         h("button",{class:"pick x",onclick:()=>castVote(mm.k,"x")}, mm.x||""),
         h("button",{class:"pick y",onclick:()=>castVote(mm.k,"y")}, mm.y||"")];
       break;
     }
     case "fanswer":
-      body = (P.ans.r===s.fk && P.ans.a.f) ? [h("h2",{},"Answer in"), waitingLine()] : answerForm(s.fk, "f", s.ft, "Final prompt");
+      body = (P.ans.r===s.fk && P.ans.a.f) ? [h("h2",{},t("answerIn")), waitingLine()] : answerForm(s.fk, "f", s.ft, t("finalPrompt"));
       break;
     case "fvote": {
       const opts = (Array.isArray(s.fo)?s.fo:[]).filter(o=>o[2]!==P.pid);
-      body = P.voted===s.fk ? [h("h2",{},"Vote in"), h("p",{class:"muted"},"Eyes on the screen.")]
-        : [h("div",{class:"pprompt"}, s.ft||""), h("p",{class:"muted"},"Pick your favourite. You can't vote for your own."),
+      body = P.voted===s.fk ? [h("h2",{},t("voteIn")), h("p",{class:"muted"},t("eyesScreen"))]
+        : [h("div",{class:"pprompt"}, s.ft||""), h("p",{class:"muted"},t("pickFav")),
            opts.map((o,i)=>h("button",{class:"pick "+(i%2?"y":"x"),onclick:()=>castVote(s.fk,o[0])}, o[1]))];
       break;
     }
-    case "end": body = [h("h2",{},"Game over"), myScoreLine(), h("p",{class:"muted"},"Stay here if the host starts another round.")]; break;
-    default: body = [h("h2",{},"Eyes on the screen"), myScoreLine()];
+    case "end": body = [h("h2",{},t("gameOver")), myScoreLine(), h("p",{class:"muted"},t("stayHere"))]; break;
+    default: body = [h("h2",{},t("eyesScreenH")), myScoreLine()];
   }
   return h("main",{class:"player"}, bar, h("p",{id:"lost",class:"lost",role:"status"}), h("section",{class:"pstage"}, body));
 }
