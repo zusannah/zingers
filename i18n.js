@@ -97,7 +97,10 @@ window.ZING_I18N = {
     removeBot: n => "Remove " + n,
     botTag: "AI",
     needHuman: "Add a real player",
-    botHint: "AI players answer with their own pre-written lines and vote at random."
+    botHint: "AI players answer with their own pre-written lines and vote at random.",
+    translating: "Translating…",
+    votedBy: "Votes from",
+    sentAs: x => "Sent as “" + x + "”"
   },
   nl: {
     switchLang: "English version",
@@ -196,6 +199,9 @@ window.ZING_I18N = {
     removeBot: n => n + " verwijderen",
     botTag: "AI",
     needHuman: "Er moet een echte speler bij",
-    botHint: "AI-spelers antwoorden met hun eigen vooraf geschreven zinnen en stemmen willekeurig."
+    botHint: "AI-spelers antwoorden met hun eigen vooraf geschreven zinnen en stemmen willekeurig.",
+    translating: "Vertalen…",
+    votedBy: "Stemmen van",
+    sentAs: x => "Verstuurd als “" + x + "”"
   }
 };

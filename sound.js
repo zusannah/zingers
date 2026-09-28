@@ -196,7 +196,13 @@ window.ZingSound = (function(){
       case "intro": sfx("round"); break;
       case "answer": case "fanswer": sfx("ding"); break;
       case "vote": case "fvote": sfx("vote"); break;
-      case "reveal": sfx(info && info.zinger ? "zinger" : (info && info.forfeit ? "sad" : "tada")); break;
+      case "reveal": {   /* authors pop in, then the votes, then the points land with the fanfare */
+        var fin = info && info.zinger ? "zinger" : (info && info.forfeit ? "sad" : "tada");
+        setTimeout(function(){ sfx("pop"); }, 800);
+        setTimeout(function(){ sfx("pop"); }, 1800);
+        setTimeout(function(){ sfx(fin); }, 2800);
+        break;
+      }
       case "scores": sfx("scores"); break;
       case "fintro": sfx("dramatic"); break;
       case "freveal": sfx("drumroll", 1.1); sfx("fanfare", 1.15); sfx("applause", 2.2, 2); break;

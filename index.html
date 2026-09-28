@@ -98,16 +98,73 @@ summary{cursor:pointer;font-weight:600}
 .ans.x{background:var(--x)} .ans.y{background:var(--y)}
 .ans .who{font-size:1rem;font-weight:600}
 .ans .pts{font-family:Bungee, Impact, sans-serif;font-weight:400;font-size:1.6rem}
-.ans .votes{font-size:.95rem;font-weight:600}
+.ans .votes{font-size:1.05rem;font-weight:700;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center}
+.ans .votes .vtag{background:var(--c);border:2px solid var(--ink);border-radius:999px;padding:.05em .6em;font-weight:800}
 .ans.none{opacity:.6;font-style:italic}
 .banner{font-family:Bungee, Impact, sans-serif;font-size:clamp(2rem,6vw,4.2rem);color:var(--pink);text-shadow:4px 4px 0 var(--line);margin:0}
 @media (prefers-reduced-motion:no-preference){.banner{animation:pop .5s cubic-bezier(.2,1.6,.4,1)}}
 @keyframes pop{from{transform:scale(.3) rotate(-8deg);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:no-preference){
+  .duel.rev .who{animation:pop .45s cubic-bezier(.2,1.4,.4,1) .8s both}
+  .duel.rev .votes{animation:pop .45s cubic-bezier(.2,1.4,.4,1) 1.8s both}
+  .duel.rev .pts{animation:pop .5s cubic-bezier(.2,1.6,.4,1) 2.8s both}
+  .stage .banner.late{animation:pop .5s cubic-bezier(.2,1.6,.4,1) 2.8s both}
+}
+.ans .who .tag{display:inline-block;background:var(--c);color:var(--ink);border:4px solid var(--ink);border-radius:999px;padding:.12em .7em;font-family:Bungee, Impact, sans-serif;font-weight:400;font-size:clamp(1.3rem,2.6vw,2.2rem);line-height:1.15;box-shadow:4px 4px 0 var(--ink);transform:rotate(-2deg)}
+.fgrid .ans .who .tag{font-size:clamp(1.1rem,2vw,1.6rem)}
+.board li{position:relative;will-change:transform}
+.board li.up{z-index:2;box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.board .gain{margin-left:auto;font-family:Bungee, Impact, sans-serif;font-weight:400;font-size:1rem;color:var(--c,var(--pink))}
+@media (prefers-reduced-motion:no-preference){.board .gain{animation:pop .45s cubic-bezier(.2,1.6,.4,1) both}}
+.board .gain + .sc{margin-left:0}
+.tro{display:block;font-size:.72em;font-weight:600;opacity:.6;margin-top:.4em}
+.sent{font-size:.9rem}
 @media (prefers-reduced-motion:no-preference){.freveal .fgrid .ans{animation:pop .45s cubic-bezier(.2,1.4,.4,1) both;animation-delay:calc(1.2s + var(--i,0) * .15s)}}
 .board{list-style:none;padding:0;margin:0;width:min(640px,100%);display:flex;flex-direction:column;gap:10px}
 .board li{display:flex;align-items:center;gap:14px;background:var(--card);border:3px solid var(--c,var(--line));border-radius:16px;padding:.55em 1em;font-size:1.35rem;font-weight:800}
 .board .rank{font-size:1.3rem;min-width:1.6em}
 .board .sc{margin-left:auto;font-family:Bungee, Impact, sans-serif;font-weight:400}
+/* ---------- motion: entrances, pops, confetti (all off with reduced motion) ---------- */
+body::before{content:"";position:fixed;inset:-20%;z-index:-1;pointer-events:none;opacity:.35;
+  background:radial-gradient(closest-side,#FF4F8B,transparent) 10% 20%/34vmax 34vmax no-repeat,
+             radial-gradient(closest-side,#FFC83D,transparent) 85% 30%/28vmax 28vmax no-repeat,
+             radial-gradient(closest-side,#22C7B8,transparent) 40% 90%/30vmax 30vmax no-repeat}
+#app{position:relative;z-index:0}
+.confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:50}
+.confetti i{position:absolute;top:-4vh;width:.7em;height:1.1em;border-radius:2px;background:var(--c);animation:fall var(--d,3s) cubic-bezier(.25,.4,.5,1) var(--w,0s) both}
+@keyframes fall{from{transform:translate3d(0,0,0) rotate(0)}to{transform:translate3d(var(--x,0),110vh,0) rotate(var(--r,720deg))}}
+@keyframes rise{from{opacity:0;transform:translateY(28px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes slam{0%{opacity:0;transform:scale(2.6) rotate(-6deg)}60%{opacity:1;transform:scale(.92) rotate(1deg)}100%{transform:none}}
+@keyframes drop{0%{opacity:0;transform:translateY(-90px) rotate(-4deg)}55%{opacity:1;transform:translateY(10px) rotate(1.5deg)}75%{transform:translateY(-4px)}100%{transform:none}}
+@keyframes slideL{0%{opacity:0;transform:translateX(-60vw) rotate(-8deg)}70%{opacity:1;transform:translateX(12px) rotate(1deg)}100%{transform:none}}
+@keyframes slideR{0%{opacity:0;transform:translateX(60vw) rotate(8deg)}70%{opacity:1;transform:translateX(-12px) rotate(-1deg)}100%{transform:none}}
+@keyframes spinIn{from{opacity:0;transform:scale(0) rotate(-540deg)}to{opacity:1;transform:none}}
+@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.25) rotate(-3deg)}100%{transform:scale(1)}}
+@keyframes throb{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
+@keyframes winner{0%{transform:none}50%{transform:scale(1.08) rotate(-1deg)}100%{transform:scale(1.04)}}
+@keyframes loser{to{opacity:.55;transform:scale(.95) rotate(1deg);filter:saturate(.6)}}
+@keyframes drift{from{transform:translate3d(-3%,-2%,0) rotate(0)}to{transform:translate3d(3%,2%,0) rotate(8deg)}}
+@keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-4deg)}75%{transform:rotate(4deg)}}
+@media (prefers-reduced-motion:no-preference){
+  body::before{animation:drift 22s ease-in-out infinite alternate}
+  .stage.enter > *{animation:rise .5s cubic-bezier(.2,1.2,.4,1) both;animation-delay:calc(var(--k,0) * 110ms)}
+  .stage.enter > .huge{animation:slam .65s cubic-bezier(.2,1.2,.4,1) both}
+  .stage.enter > .marquee{animation:drop .75s cubic-bezier(.3,1.3,.5,1) both}
+  .stage.enter .duel .ans.x{animation:slideL .7s cubic-bezier(.2,1,.4,1) .35s both}
+  .stage.enter .duel .ans.y{animation:slideR .7s cubic-bezier(.2,1,.4,1) .55s both}
+  .stage.enter .duel .vs{animation:spinIn .6s cubic-bezier(.2,1.4,.4,1) .9s both}
+  .stage.enter > .duel{animation:none}
+  .duel.rev .ans.win{animation:winner .7s cubic-bezier(.2,1.6,.4,1) 3s both;box-shadow:0 0 0 6px var(--line),0 18px 40px rgba(0,0,0,.3)}
+  .duel.rev .ans.lose{animation:loser .7s ease 3s both}
+  .chips li.pop,.status li.pop{animation:bump .55s cubic-bezier(.2,1.6,.4,1)}
+  .timer.hurry{animation:throb .5s ease-in-out infinite;background:var(--pink);color:#fff}
+  .vs{display:inline-block}
+  .bigcode{animation:wiggle 4s ease-in-out infinite}
+  .pstage.enter > *{animation:rise .45s cubic-bezier(.2,1.2,.4,1) both;animation-delay:calc(var(--k,0) * 90ms)}
+  .pstage.enter > .pick.x{animation:slideL .55s cubic-bezier(.2,1,.4,1) both;animation-delay:calc(var(--k,0) * 90ms)}
+  .pstage.enter > .pick.y{animation:slideR .55s cubic-bezier(.2,1,.4,1) both;animation-delay:calc(var(--k,0) * 90ms)}
+  .pick:active{transform:scale(.97)}
+}
 .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;width:100%}
 .fgrid .ans{min-height:120px;font-size:clamp(1.1rem,2.2vw,1.7rem)}
 .fgrid .ans:nth-child(odd){background:var(--x)} .fgrid .ans:nth-child(even){background:var(--y)}
@@ -161,6 +218,23 @@ function h(tag, attrs, ...kids){
   return e;
 }
 function mount(node){ document.documentElement.lang = lang(); app.replaceChildren(node); }
+const calm = ()=>!!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+/* Play the entrance animation only when a new screen appears, not on every progress redraw. */
+function enter(sel){ const st = app.querySelector(sel); if(!st) return; st.classList.add("enter"); [...st.children].forEach((c,i)=>c.style.setProperty("--k", i)); }
+/* Pop newly finished or newly joined players once. */
+function popNew(list, seen){ list.forEach(li=>{ const id = li.dataset.pid; if(id && !seen.has(id)){ seen.add(id); li.classList.add("pop"); } }); }
+function confetti(n, delay){
+  if(calm() || document.hidden) return;
+  setTimeout(()=>{
+    const box = h("div",{class:"confetti","aria-hidden":"true"});
+    for(let i=0;i<n;i++){
+      const e = h("i",{});
+      e.style.cssText = "left:"+(Math.random()*100)+"vw;--c:"+COLORS[i%COLORS.length]+";--d:"+(2.4+Math.random()*2).toFixed(2)+"s;--w:"+(Math.random()*.6).toFixed(2)+"s;--x:"+((Math.random()-.5)*30).toFixed(1)+"vw;--r:"+Math.round((Math.random()-.5)*1440)+"deg;width:"+(6+Math.random()*8).toFixed(0)+"px";
+      box.append(e);
+    }
+    document.body.append(box); setTimeout(()=>box.remove(), 5200);
+  }, delay||0);
+}
 function clean(s, n){
   return String(s==null?"":s)
     .replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g,"")
@@ -188,7 +262,7 @@ function startTicker(fn){
   setInterval(fn, 250);
 }
 const COLORS = ["#FF4F8B","#22C7B8","#FFC83D","#9B8CFF","#FF8A3D","#5ED36B","#4FB3FF","#F27BF2"];
-const T = { answer:90000, vote:20000, reveal:7000, scores:8000, intro:4500, fanswer:75000, fvote:30000, freveal:12000 };
+const T = { answer:120000, vote:20000, reveal:13000, scores:11000, intro:4500, fanswer:100000, fvote:30000, freveal:18000 };
 const BANK_EN = window.ZINGERS_PROMPTS || { clean:[], cheeky:[], finals:[] };
 /* ---------- language ---------- */
 const DICT = window.ZING_I18N || { en:{} };
@@ -592,7 +666,12 @@ function voteOf(pid, key){
 }
 
 function changed(){ emitState(); hostRender(true); }
-function setPhase(ph, ms){ H.G.phase = ph; H.G.endsAt = ms ? Date.now()+ms : 0; changed(); H.sndK = ""; Snd.phase(ph, ph==="reveal" ? H.G.reveal : null); }
+function setPhase(ph, ms){
+  H.G.phase = ph; H.G.endsAt = ms ? Date.now()+ms : 0; changed(); H.sndK = ""; Snd.phase(ph, ph==="reveal" ? H.G.reveal : null);
+  if(ph==="reveal" && H.G.reveal && H.G.reveal.zinger) confetti(90, 2800);
+  if(ph==="freveal") confetti(70, 1400 + (H.G.final.res||[]).length*150 + 600);
+  if(ph==="end") confetti(160, 300);
+}
 
 function startGame(){
   const G = H.G;
@@ -610,7 +689,7 @@ function beginAnswer(){
   const G = H.G;
   const ps = shuffle(G.players.map(p=>p.pid)), n = ps.length;
   const texts = takeFrom("prompts", n);
-  G.rk = "r"+G.round+"-"+rid().slice(0,5);
+  G.rk = "r"+G.round+"-"+rid().slice(0,5); G.prev = {...G.scores};
   G.prompts = texts.map((t,i)=>({ id:"p"+i, t, a:ps[i], b:ps[(i+1)%n] }));
   setPhase("answer", T.answer); runBots("answer");
 }
@@ -668,7 +747,7 @@ function afterScores(){
 }
 function beginFinal(){
   const G = H.G;
-  G.final = { t: takeFrom("finals",1)[0], fk:"f-"+rid().slice(0,6), opts:[], res:null };
+  G.final = { t: takeFrom("finals",1)[0], fk:"f-"+rid().slice(0,6), opts:[], res:null }; G.prev = {...G.scores};
   setPhase("fanswer", T.fanswer); runBots("fanswer");
 }
 function allFinalAnswered(){ const G=H.G; return G.players.every(p=>!isOn(p.pid) || ansOf(p.pid,G.final.fk,"f")); }
@@ -745,6 +824,7 @@ function updateTimer(ms){
   const el = document.getElementById("timer"); if(!el) return;
   const t = ms>0 ? String(Math.ceil(ms/1000)) : "";
   if(el.textContent !== t) el.textContent = t;
+  el.classList.toggle("hurry", ms>0 && ms<=5500 && H.G && ["answer","vote","fanswer","fvote"].includes(H.G.phase));
 }
 
 function hostKey(){
@@ -760,22 +840,72 @@ function hostKey(){
 function hostRender(force){
   if(!H.G || screen!=="game") return;
   const k = hostKey(); if(!force && k===H.viewKey) return;
+  const G = H.G, sk = [G.phase, G.round, G.mi, G.rk].join("|");
+  /* let a fresh screen finish its entrance before redrawing it for progress updates */
+  if(!force && sk===H.stageKey && Date.now()-H.stageAt < 1800){ clearTimeout(H.deferT); H.deferT = setTimeout(()=>hostRender(false), 1850-(Date.now()-H.stageAt)); return; }
   H.viewKey = k; mount(hostView()); updateTimer(H.G.endsAt ? H.G.endsAt-Date.now() : 0);
+  if(sk !== H.stageKey){ H.stageKey = sk; H.stageAt = Date.now(); H.popSeen = new Set(); if(!["reveal","freveal"].includes(G.phase)) enter(".host .stage"); }
+  popNew(app.querySelectorAll(".status li.done, .chips li"), H.popSeen || (H.popSeen = new Set()));
 }
 function statusList(done){
-  return h("ul",{class:"status"}, H.G.players.map(p=>h("li",{class:(done(p.pid)?"done ":"")+(isOn(p.pid)?"":"gone"),style:"--c:"+p.color}, p.name)));
+  return h("ul",{class:"status"}, H.G.players.map(p=>h("li",{class:(done(p.pid)?"done ":"")+(isOn(p.pid)?"":"gone"),style:"--c:"+p.color,"data-pid":done(p.pid)?p.pid:null}, p.name)));
 }
-function board(){
-  const G = H.G;
-  const rows = [...G.players].sort((a,b)=>(G.scores[b.pid]||0)-(G.scores[a.pid]||0));
-  return h("ol",{class:"board"}, rows.map((p,i)=>h("li",{style:"--c:"+p.color}, h("span",{class:"rank"},String(i+1)), p.name, h("span",{class:"sc"}, String(G.scores[p.pid]||0)))));
+function ranked(sc){ return [...H.G.players].sort((a,b)=>(sc[b.pid]||0)-(sc[a.pid]||0)); }
+function boardList(rows, sc){
+  return h("ol",{class:"board"}, rows.map((p,i)=>h("li",{style:"--c:"+p.color,"data-pid":p.pid}, h("span",{class:"rank"},String(i+1)), p.name, h("span",{class:"sc"}, String(sc[p.pid]||0)))));
 }
-function ansCard(cls, info, showMeta){
-  return h("div",{class:"ans "+cls+(info.text?"":" none")},
+/* Scoreboard. With "prev" (scores before this round) it first shows the old order,
+   then every name tag slides to its new place while the points count up. */
+function board(prev){
+  const G = H.G, key = [G.phase, G.round, G.rk, G.final ? G.final.fk : ""].join("|");
+  const still = !prev || H.boardDone===key || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  if(still) return boardList(ranked(G.scores), G.scores);
+  const ol = boardList(ranked(prev), prev);
+  setTimeout(()=>shuffleBoard(ol, prev, G.scores, key), 1300);
+  return ol;
+}
+function shuffleBoard(ol, prev, now, key){
+  if(!ol.isConnected || !H.G) return;
+  H.boardDone = key;
+  const rows = ranked(now), items = new Map([...ol.children].map(li=>[li.dataset.pid, li]));
+  const before = new Map([...items].map(([pid,li])=>[pid, li.getBoundingClientRect().top]));
+  rows.forEach(p=>{ const li = items.get(p.pid); if(li) ol.appendChild(li); });
+  let moved = false;
+  rows.forEach((p,i)=>{
+    const li = items.get(p.pid); if(!li) return;
+    const dy = before.get(p.pid) - li.getBoundingClientRect().top;
+    li.style.transition = "none"; li.style.transform = "translateY("+dy+"px)";
+    if(dy > 4){ li.classList.add("up"); moved = true; } else if(dy < -4) moved = true;
+    li.querySelector(".rank").textContent = String(i+1);
+    const gain = (now[p.pid]||0) - (prev[p.pid]||0);
+    if(gain > 0) li.querySelector(".sc").before(h("span",{class:"gain"},"+"+gain));
+  });
+  ol.getBoundingClientRect();
+  const D = 1800;
+  requestAnimationFrame(()=>items.forEach(li=>{ li.style.transition = "transform "+D+"ms cubic-bezier(.45,0,.15,1)"; li.style.transform = ""; }));
+  setTimeout(()=>items.forEach(li=>li.classList.remove("up")), D+200);
+  if(moved) Snd.sfx("whoosh");
+  const t0 = performance.now();
+  const step = tm=>{
+    const k = Math.min(1, (tm-t0)/D), e = 1-Math.pow(1-k, 3);
+    items.forEach((li,pid)=>{ const a = prev[pid]||0, b = now[pid]||0; li.querySelector(".sc").textContent = String(Math.round(a+(b-a)*e)); });
+    if(k < 1 && ol.isConnected) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function colorOf(pid){ const p = H.G && H.G.players.find(p=>p.pid===pid); return (p && p.color) || H.colorOf[pid] || "var(--line)"; }
+function whoTag(pid){ return h("div",{class:"who"}, h("span",{class:"tag",style:"--c:"+colorOf(pid)}, nameOf(pid))); }
+function voteTags(names){
+  const col = n=>{ const p = H.G.players.find(p=>p.name===n); return p ? p.color : "var(--card)"; };
+  return h("div",{class:"votes"}, h("span",{class:"vl"}, t("votedBy")), names.map(n=>h("span",{class:"vtag",style:"--c:"+col(n)}, n)));
+}
+function ansCard(cls, info, showMeta, other){
+  const res = showMeta && other ? ((info.pts||0) > (other.pts||0) ? " win" : ((info.pts||0) < (other.pts||0) ? " lose" : "")) : "";
+  return h("div",{class:"ans "+cls+(info.text?"":" none")+res},
     h("div",{}, info.text || t("noAnswer")),
-    showMeta ? h("div",{class:"who"}, nameOf(info.pid)) : null,
+    showMeta ? whoTag(info.pid) : null,
     showMeta ? h("div",{class:"pts"}, "+"+(info.pts||0)) : null,
-    showMeta && info.votes && info.votes.length ? h("div",{class:"votes"}, t("votesFrom", info.votes.join(", "))) : null);
+    showMeta && info.votes && info.votes.length ? voteTags(info.votes) : null);
 }
 function hostView(){
   const G = H.G;
@@ -796,8 +926,8 @@ function hostView(){
           H.qr ? h("div",{html:H.qr}) : null,
           h("div",{class:"bigcode","aria-label":t("roomCode")+" "+H.code.split("").join(" ")},H.code)),
         players.length ? h("ul",{class:"chips"}, players.map(p=>isBot(p.pid)
-            ? h("li",{class:"bot",style:"--c:"+H.colorOf[p.pid]}, h("span",{class:"bottag"},t("botTag")), p.name, h("button",{class:"chipx","aria-label":t("removeBot", p.name),title:t("removeBot", p.name),onclick:()=>removeBot(p.pid)},"×"))
-            : h("li",{style:"--c:"+H.colorOf[p.pid]},p.name))) : h("p",{class:"muted"},t("waitingPlayers")),
+            ? h("li",{class:"bot",style:"--c:"+H.colorOf[p.pid],"data-pid":p.pid}, h("span",{class:"bottag"},t("botTag")), p.name, h("button",{class:"chipx","aria-label":t("removeBot", p.name),title:t("removeBot", p.name),onclick:()=>removeBot(p.pid)},"×"))
+            : h("li",{style:"--c:"+H.colorOf[p.pid],"data-pid":p.pid},p.name))) : h("p",{class:"muted"},t("waitingPlayers")),
         h("div",{class:"row"},
           h("button",{class:"ghost",disabled: players.length>=8, onclick:addBot}, t("addBot")),
           h("button",{class:"primary big",disabled: need>0 || humans<1, onclick:startGame}, need>0 ? t("needMore", need) : (humans<1 ? t("needHuman") : t("startGame")))),
@@ -817,13 +947,13 @@ function hostView(){
       const n = voters(m).length, v = G.phase==="vote" ? votedPids().length : 0;
       body = h("section",{class:"stage"},
         h("div",{class:"marquee"}, m.t),
-        h("div",{class:"duel"}, ansCard("x",X,!!R), h("div",{class:"vs"},"vs"), ansCard("y",Y,!!R)),
-        R ? (R.zinger ? h("p",{class:"banner"},t("zinger")) : (R.forfeit ? h("p",{class:"lead"},t("forfeit")) : null))
+        h("div",{class:"duel"+(R?" rev":"")}, ansCard("x",X,!!R,Y), h("div",{class:"vs"},"vs"), ansCard("y",Y,!!R,X)),
+        R ? (R.zinger ? h("p",{class:"banner late"},t("zinger")) : (R.forfeit ? h("p",{class:"lead"},t("forfeit")) : null))
           : h("p",{class:"lead"}, t("voteOnPhone", v, n)));
       break;
     }
     case "scores":
-      body = h("section",{class:"stage"}, h("h2",{class:"huge"}, t("afterRound", G.round<2 ? 1 : 2)), board());
+      body = h("section",{class:"stage"}, h("h2",{class:"huge"}, t("afterRound", G.round<2 ? 1 : 2)), board(G.prev));
       break;
     case "fintro":
       body = h("section",{class:"stage"}, h("h2",{class:"huge"},t("theFinal")), h("p",{class:"lead"},t("finalLead")));
@@ -839,12 +969,12 @@ function hostView(){
     case "freveal":
       body = h("section",{class:"stage freveal"}, h("div",{class:"marquee"}, G.final.t),
         h("div",{class:"fgrid"}, [...G.final.res].sort((a,b)=>a.votes.length-b.votes.length).map((o,i)=>h("div",{class:"ans",style:"--i:"+i},
-          h("div",{},o.t), h("div",{class:"who"},nameOf(o.pid)), h("div",{class:"pts"},"+"+o.pts),
-          o.votes.length ? h("div",{class:"votes"},t("votesFrom", o.votes.join(", "))) : null))));
+          h("div",{},o.t), whoTag(o.pid), h("div",{class:"pts"},"+"+o.pts),
+          o.votes.length ? voteTags(o.votes) : null))));
       break;
     case "end": {
       const top = [...G.players].sort((a,b)=>(G.scores[b.pid]||0)-(G.scores[a.pid]||0))[0];
-      body = h("section",{class:"stage"}, h("p",{class:"banner"}, top ? t("wins", top.name) : t("gameOver")), board(),
+      body = h("section",{class:"stage"}, h("p",{class:"banner"}, top ? t("wins", top.name) : t("gameOver")), board(G.prev),
         h("div",{class:"row"}, h("button",{class:"primary big",onclick:playAgain},t("playAgain"))));
       break;
     }
@@ -881,11 +1011,13 @@ function onState(d){
   if(typeof d.seq!=="number" || d.seq <= P.seq) return;
   P.seq = d.seq; P.st = d; P.lastSeen = Date.now();
   P.localEnd = d.rem ? Date.now()+Number(d.rem) : 0;
+  try{ trPrefetch(); }catch(e){}
   playerRender(false);
 }
 function playerTick(){
   const tEl = document.getElementById("ptimer");
-  if(tEl){ const ms = P.localEnd - Date.now(); const s = ms>0 ? String(Math.ceil(ms/1000)) : ""; if(tEl.textContent!==s) tEl.textContent = s; }
+  if(tEl){ const ms = P.localEnd - Date.now(); const s = ms>0 ? String(Math.ceil(ms/1000)) : ""; if(tEl.textContent!==s) tEl.textContent = s;
+    tEl.classList.toggle("hurry", ms>0 && ms<=5500 && !!P.st && ["answer","vote","fanswer","fvote"].includes(P.st.ph)); }
   const l = document.getElementById("lost");
   if(l){ const msg = (P.link==="down" || (P.st && Date.now()-P.lastSeen > 8000)) ? t("lost") : ""; if(l.textContent!==msg) l.textContent = msg; }
 }
@@ -901,6 +1033,73 @@ function submitAns(key, id, text){
 }
 function castVote(key, v){ P.voted = key; P.lastVote = { k:key, v }; P.nr.presence({ vote:{ k:key, v } }); saveP(); playerRender(true); }
 function saveP(){ tabStore.set("zing-state", JSON.stringify({ code:P.code, ans:P.ans, voted:P.voted, lastVote:P.lastVote||null })); }
+
+/* ---------- personal translation ----------
+   A player who picks a different language than the host sees prompts and vote options translated on
+   their own phone, and their answers are translated into the host's language before sending
+   (unless they already typed in that language). Nobody else sees any difference. */
+const TRP = new Map(), TRD = new Map();
+function trOn(){ const s = P.st; return !!(P.nr && s && (s.lg==="nl" || s.lg==="en") && lang()!==s.lg); }
+async function gtx(text, sl, tl){
+  const ctl = new AbortController(), tm = setTimeout(()=>ctl.abort(), 4000);
+  try{
+    const r = await fetch("https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl="+sl+"&tl="+tl+"&q="+encodeURIComponent(text), {signal:ctl.signal});
+    if(!r.ok) throw new Error("tr "+r.status);
+    const j = await r.json(), out = (Array.isArray(j[0]) ? j[0] : []).map(x=>x && x[0] || "").join("").trim();
+    if(!out) throw new Error("tr empty");
+    return { t: out, d: typeof j[2]==="string" ? j[2] : sl };
+  } finally { clearTimeout(tm); }
+}
+async function myMemory(text, sl, tl){
+  const ctl = new AbortController(), tm = setTimeout(()=>ctl.abort(), 4000);
+  try{
+    const r = await fetch("https://api.mymemory.translated.net/get?langpair="+(sl==="auto" ? (tl==="nl" ? "en" : "nl") : sl)+"|"+tl+"&q="+encodeURIComponent(text), {signal:ctl.signal});
+    const j = await r.json(), out = j && j.responseData && String(j.responseData.translatedText||"").trim();
+    if(!out || j.responseStatus!==200) throw new Error("tr mm");
+    return { t: out, d: sl };
+  } finally { clearTimeout(tm); }
+}
+function translate(text, sl, tl){
+  const k = sl+">"+tl+"|"+text;
+  if(!TRP.has(k)) TRP.set(k, gtx(text, sl, tl).catch(()=>myMemory(text, sl, tl)).catch(()=>null));
+  return TRP.get(k);
+}
+/* Fill an element with the text, translated for this player when needed (original shown small underneath). */
+function trFill(el, text){
+  text = String(text||""); el.textContent = "";
+  if(!text || !trOn()){ el.textContent = text; return el; }
+  const sl = P.st.lg, tl = lang(), k = sl+">"+tl+"|"+text, got = TRD.get(k);
+  el.dataset.trk = k;
+  el.append(h("span",{class:"trm"}, got || text));
+  if(got && got.toLowerCase()!==text.toLowerCase()) el.append(h("span",{class:"tro",lang:sl}, text));
+  if(got===undefined){
+    TRD.set(k, null);
+    translate(text, sl, tl).then(r=>{
+      TRD.set(k, r ? r.t : text);
+      app.querySelectorAll("[data-trk]").forEach(e=>{ if(e.dataset.trk===k) trFill(e, text); });
+    });
+  }
+  return el;
+}
+function trBox(tag, attrs, text){ return trFill(h(tag, attrs), text); }
+/* Warm the cache as soon as new text arrives, so it is usually ready before the screen needs it. */
+function trPrefetch(){
+  if(!trOn()) return;
+  const s = P.st, sl = s.lg, tl = lang(), want = [];
+  if(s.ph==="answer") myTasks().forEach(p=>want.push(p[1]));
+  if((s.ph==="vote"||s.ph==="reveal") && s.m) want.push(s.m.t, s.m.x, s.m.y);
+  if(s.ph==="fanswer"||s.ph==="fvote") want.push(s.ft);
+  if(s.ph==="fvote" && Array.isArray(s.fo)) s.fo.forEach(o=>want.push(o[1]));
+  want.filter(Boolean).forEach(x=>{ const k = sl+">"+tl+"|"+x; if(!TRD.has(k)){ TRD.set(k, null); translate(x, sl, tl).then(r=>{ TRD.set(k, r ? r.t : x); app.querySelectorAll("[data-trk]").forEach(e=>{ if(e.dataset.trk===k) trFill(e, x); }); }); } });
+}
+/* Answers go out in the host's language. Falls back to the typed text if translation is slow or fails. */
+async function toGameLang(text){
+  if(!trOn()) return text;
+  const gl = P.st.lg;
+  const r = await Promise.race([translate(text, "auto", gl), new Promise(res=>setTimeout(()=>res(null), 5000))]);
+  if(!r || r.d===gl) return text;
+  return clean(r.t, 60) || text;
+}
 
 function playerKey(){
   const s = P.st; if(!s) return "wait";
@@ -920,21 +1119,37 @@ function playerRender(force){
   if(screen!=="game" || !P.nr) return;
   const k = playerKey(); if(!force && k===P.viewKey) return;
   P.viewKey = k; mount(playerView()); playerTick();
+  const s = P.st, tk = s && s.ph==="answer" ? nextTask() : null;
+  const ak = s ? [s.hid, s.ph, s.rd, tk ? tk[0] : "", s.m && s.m.k, P.voted, s.fk, !!me()].join("|") : "wait";
+  if(ak !== P.animKey){ P.animKey = ak; enter(".pstage"); }
   const f = app.querySelector("input,.pick"); if(f && f.tagName==="INPUT"){ f.focus(); try{ f.setSelectionRange(f.value.length, f.value.length); }catch(e){} }
 }
 function answerForm(key, id, promptText, label){
   const dk = key+"|"+id;
   const inp = h("input",{maxlength:"60",autocomplete:"off",enterkeyhint:"send","aria-label":t("yourAnswer"),placeholder:t("yourAnswer"),value:(P.draft&&P.draft.k===dk)?P.draft.v:""});
   inp.addEventListener("input",()=>{ P.draft = {k:dk, v:inp.value}; });
-  const send = ()=>{ P.draft = null; submitAns(key,id,inp.value); };
+  const btn = h("button",{class:"primary big"},t("send"));
+  const send = async ()=>{
+    const typed = clean(inp.value, 60); if(!typed || P.sending===dk) return;
+    let out = typed;
+    if(trOn()){
+      P.sending = dk; btn.disabled = true; inp.disabled = true; btn.textContent = t("translating");
+      try{ out = await toGameLang(typed); }catch(e){ out = typed; }
+      P.sending = null;
+      P.sent = out.toLowerCase()!==typed.toLowerCase() ? { k:key, t:out } : null;
+    }
+    P.draft = null; submitAns(key,id,out);
+  };
+  btn.addEventListener("click", send);
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); send(); } });
-  return [ label ? h("p",{class:"count muted"},label) : null, h("div",{class:"pprompt"},promptText), inp, h("button",{class:"primary big",onclick:send},t("send")) ];
+  return [ label ? h("p",{class:"count muted"},label) : null, sentLine(key), trBox("div",{class:"pprompt"},promptText), inp, btn ];
 }
+function sentLine(key){ return (P.sent && P.sent.k===key) ? h("p",{class:"muted sent"}, t("sentAs", P.sent.t)) : null; }
 function waitingLine(){
   const s = P.st, dn = Array.isArray(s.dn) ? s.dn : null;
   const left = dn ? (s.pl||[]).filter(p=>p[0]!==P.pid && !dn.includes(p[0])).map(p=>p[1]) : [];
   const txt = left.length ? t("waitingFor", left.join(", ")) : t("allIn");
-  return [h("p",{class:"muted"},txt), h("p",{class:"muted",style:"font-size:.9rem"},t("savedNote"))];
+  return [sentLine(s.ph==="fanswer" ? s.fk : s.rk), h("p",{class:"muted"},txt), h("p",{class:"muted",style:"font-size:.9rem"},t("savedNote"))];
 }
 function myScoreLine(){
   const s=P.st; if(!s.sc) return null;
@@ -963,9 +1178,9 @@ function playerView(){
       const mm = s.m || {};
       if(Array.isArray(mm.au) && mm.au.includes(P.pid)) body = [h("h2",{},t("yourMatch")), h("p",{class:"muted"},t("noVoteHere"))];
       else if(P.voted===mm.k) body = [h("h2",{},t("voteIn")), h("p",{class:"muted"},t("eyesScreen"))];
-      else body = [h("div",{class:"pprompt"}, mm.t||""), h("p",{class:"muted"},t("funnier")),
-        h("button",{class:"pick x",onclick:()=>castVote(mm.k,"x")}, mm.x||""),
-        h("button",{class:"pick y",onclick:()=>castVote(mm.k,"y")}, mm.y||"")];
+      else body = [trBox("div",{class:"pprompt"}, mm.t), h("p",{class:"muted"},t("funnier")),
+        trBox("button",{class:"pick x",onclick:()=>castVote(mm.k,"x")}, mm.x),
+        trBox("button",{class:"pick y",onclick:()=>castVote(mm.k,"y")}, mm.y)];
       break;
     }
     case "fanswer":
@@ -974,8 +1189,8 @@ function playerView(){
     case "fvote": {
       const opts = (Array.isArray(s.fo)?s.fo:[]).filter(o=>o[2]!==P.pid);
       body = P.voted===s.fk ? [h("h2",{},t("voteIn")), h("p",{class:"muted"},t("eyesScreen"))]
-        : [h("div",{class:"pprompt"}, s.ft||""), h("p",{class:"muted"},t("pickFav")),
-           opts.map((o,i)=>h("button",{class:"pick "+(i%2?"y":"x"),onclick:()=>castVote(s.fk,o[0])}, o[1]))];
+        : [trBox("div",{class:"pprompt"}, s.ft), h("p",{class:"muted"},t("pickFav")),
+           opts.map((o,i)=>trBox("button",{class:"pick "+(i%2?"y":"x"),onclick:()=>castVote(s.fk,o[0])}, o[1]))];
       break;
     }
     case "end": body = [h("h2",{},t("gameOver")), myScoreLine(), h("p",{class:"muted"},t("stayHere"))]; break;
