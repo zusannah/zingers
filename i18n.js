@@ -92,7 +92,12 @@ window.ZING_I18N = {
     answerIn: "Answer in",
     finalPrompt: "Final prompt",
     pickFav: "Pick your favourite. You can't vote for your own.",
-    stayHere: "Stay here if the host starts another round."
+    stayHere: "Stay here if the host starts another round.",
+    addBot: "+ AI player",
+    removeBot: n => "Remove " + n,
+    botTag: "AI",
+    needHuman: "Add a real player",
+    botHint: "AI players answer with their own pre-written lines and vote at random."
   },
   nl: {
     switchLang: "English version",
@@ -186,6 +191,11 @@ window.ZING_I18N = {
     answerIn: "Antwoord binnen",
     finalPrompt: "Finalevraag",
     pickFav: "Kies je favoriet. Op jezelf stemmen kan niet.",
-    stayHere: "Blijf hier als de host nog een potje start."
+    stayHere: "Blijf hier als de host nog een potje start.",
+    addBot: "+ AI-speler",
+    removeBot: n => n + " verwijderen",
+    botTag: "AI",
+    needHuman: "Er moet een echte speler bij",
+    botHint: "AI-spelers antwoorden met hun eigen vooraf geschreven zinnen en stemmen willekeurig."
   }
 };

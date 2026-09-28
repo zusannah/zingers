@@ -67,6 +67,9 @@ summary{cursor:pointer;font-weight:600}
 .logo{font-size:1.6rem;color:var(--pink)}
 .langfix{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:16px;z-index:5}
 .langbtn{min-width:3.2em;font-weight:800;letter-spacing:.06em}
+.chips .bot{display:inline-flex;align-items:center;gap:.4em}
+.bottag{font-size:.7rem;font-weight:800;letter-spacing:.08em;background:var(--c);color:var(--ink);border-radius:6px;padding:.1em .4em}
+.chipx{border:0;background:none;padding:0 .1em;font-size:1.2rem;line-height:1;color:var(--muted);cursor:pointer}
 .linklike{background:none;border:0;padding:0;cursor:pointer;font-family:Bungee, Impact, sans-serif;font-weight:400;border-radius:8px}
 .pbar .logo{font-size:1.05rem}
 .resume{border-color:var(--pink);margin:0 0 20px}
@@ -133,6 +136,7 @@ summary{cursor:pointer;font-weight:600}
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/dist/qrcode.js" integrity="sha384-e9EFD6BGC90bkW9aDV5xbbBfzwN7G8YImHao2lfLVKV/hPB0E0go+H3I64h7oHtA" crossorigin="anonymous"></script>
 <script src="prompts.js"></script>
 <script src="i18n.js"></script>
+<script src="ai-answers.js"></script>
 <script src="sound.js"></script>
 <script>
 (function(){
@@ -368,7 +372,7 @@ function resumeBanner(){
     h("p",{class:"muted",style:"font-size:.9rem;margin:.8em 0 0"}, H.nr ? t("resumeNoteHost") : t("resumeNotePlayer")));
 }
 function leaveSession(){
-  if(H.nr){ try{ H.nr.close(); }catch(e){} Snd.stopMusic(); H.nr = null; H.G = null; H.peers = []; H.memo = {ans:{},vote:{}}; H.colorOf = {}; H.used = new Set(); H.viewKey = ""; H.hid = rid(); H.seq = 0; }
+  if(H.nr){ try{ H.nr.close(); }catch(e){} Snd.stopMusic(); clearBots(); H.bots = []; H.botUsed = new Set(); H.nr = null; H.G = null; H.peers = []; H.memo = {ans:{},vote:{}}; H.colorOf = {}; H.used = new Set(); H.viewKey = ""; H.hid = rid(); H.seq = 0; }
   if(P.nr){ try{ P.nr.close(); }catch(e){} P.nr = null; P.st = null; P.hid = null; P.seq = 0; P.localEnd = 0; P.lastSeen = 0; P.viewKey = ""; P.ans = {r:"",a:{}}; P.voted = ""; P.lastVote = null; P.link = "up"; }
 }
 
@@ -422,7 +426,7 @@ function renderHome(err){
    HOST
    ====================================================================== */
 const H = { nr:null, code:"", peers:[], G:null, hid:rid(), seq:0, pool:{prompts:[],finals:[]}, used:new Set(),
-            spice:"clean", own:[], lastEmit:0, viewKey:"", colorOf:{}, qr:"", memo:{ans:{},vote:{}} };
+            spice:"clean", own:[], lastEmit:0, viewKey:"", colorOf:{}, qr:"", memo:{ans:{},vote:{}}, bots:[], botTimers:[], botUsed:new Set() };
 
 function newGame(){ return { phase:"lobby", round:0, players:[], scores:{}, prompts:[], matches:[], mi:0, endsAt:0, rk:"", vk:"", reveal:null, final:null }; }
 function basePrompts(){ const B = bank(); return H.spice==="cheeky" ? [...B.clean, ...B.cheeky] : [...B.clean]; }
@@ -470,6 +474,79 @@ function takeFrom(key, n){
   return out;
 }
 
+/* ---------- AI players: answer from a pre-written bank, vote at random ---------- */
+const AIB = window.ZINGERS_AI || { answers:{}, fallback:{en:[],nl:[]}, names:{en:[],nl:[]} };
+function isBot(pid){ return typeof pid==="string" && pid.startsWith("ai-"); }
+function humanCount(){ return lobbyPlayers().filter(p=>!isBot(p.pid)).length; }
+function addBot(){
+  if(lobbyPlayers().length >= 8) return;
+  const taken = new Set(H.bots.map(b=>b.name));
+  const pool = (AIB.names[lang()]||[]).concat(AIB.names.en||[]).filter(n=>!taken.has(n));
+  const name = pool[0] || ("Bot "+(H.bots.length+1));
+  const pid = "ai-"+rid().slice(0,8);
+  H.colorOf[pid] = COLORS[Object.keys(H.colorOf).length % COLORS.length];
+  H.bots.push({pid, name});
+  Snd.sfx("join"); changed();
+}
+function removeBot(pid){ H.bots = H.bots.filter(b=>b.pid!==pid); changed(); }
+function humanize(txt){
+  let t2 = String(txt).trim();
+  const r = Math.random();
+  if(r < 0.45) t2 = t2.toLowerCase();
+  else if(r < 0.7) t2 = t2.charAt(0).toLowerCase()+t2.slice(1);
+  if(Math.random() < 0.5) t2 = t2.replace(/\.$/,"");
+  return t2;
+}
+function botLine(promptText){
+  let list = AIB.answers[promptText];
+  if(!list || !list.length) list = AIB.fallback[lang()] || AIB.fallback.en || ["..."];
+  const fresh = list.filter(a=>!H.botUsed.has(a));
+  const pick = (fresh.length ? fresh : list)[Math.floor(Math.random()*(fresh.length ? fresh.length : list.length))];
+  H.botUsed.add(pick);
+  return humanize(pick).slice(0,60);
+}
+function botLater(ms, still, act){
+  H.botTimers.push(setTimeout(()=>{ if(!H.G || !still()) return; act(); absorbTick(); }, ms));
+}
+function absorbTick(){ progressSound(); hostTick(); hostRender(false); }
+function clearBots(){ H.botTimers.forEach(clearTimeout); H.botTimers = []; }
+function runBots(kind){
+  const G = H.G; if(!G) return;
+  const bots = G.players.filter(p=>isBot(p.pid));
+  const rand = (a,b)=>a+Math.random()*(b-a);
+  for(const b of bots){
+    if(kind==="answer"){
+      const rk = G.rk; let at = rand(2500, 9000);
+      for(const task of tasksOf(b.pid)){
+        const tsk = task;
+        botLater(at, ()=>G===H.G && G.phase==="answer" && G.rk===rk, ()=>{
+          const k = b.pid+"|"+rk, m = H.memo.ans[k] || (H.memo.ans[k] = {});
+          if(!m[tsk.id]) m[tsk.id] = botLine(tsk.t);
+        });
+        at += rand(2500, 8000);
+      }
+    } else if(kind==="vote"){
+      const vk = G.vk, m = cur();
+      if(!m || m.a===b.pid || m.b===b.pid) continue;
+      botLater(rand(1500, 6000), ()=>G===H.G && G.phase==="vote" && G.vk===vk, ()=>{
+        const k = b.pid+"|"+vk; if(!(k in H.memo.vote)) H.memo.vote[k] = Math.random()<.5 ? "x" : "y";
+      });
+    } else if(kind==="fanswer"){
+      const fk = G.final.fk, ft = G.final.t;
+      botLater(rand(4000, 15000), ()=>G===H.G && G.phase==="fanswer" && G.final.fk===fk, ()=>{
+        const k = b.pid+"|"+fk, m = H.memo.ans[k] || (H.memo.ans[k] = {});
+        if(!m.f) m.f = botLine(ft);
+      });
+    } else if(kind==="fvote"){
+      const fk = G.final.fk, opts = G.final.opts.filter(o=>o.pid!==b.pid);
+      if(!opts.length) continue;
+      botLater(rand(2500, 9000), ()=>G===H.G && G.phase==="fvote" && G.final.fk===fk, ()=>{
+        const k = b.pid+"|"+fk; if(!(k in H.memo.vote)) H.memo.vote[k] = opts[Math.floor(Math.random()*opts.length)].i;
+      });
+    }
+  }
+}
+
 function lobbyPlayers(){
   const seen = new Map();
   for(const p of H.peers){
@@ -480,14 +557,14 @@ function lobbyPlayers(){
     if(!H.colorOf[pid]) H.colorOf[pid] = COLORS[Object.keys(H.colorOf).length % COLORS.length];
     seen.set(pid,{pid,name});
   }
-  return [...seen.values()].slice(0,8);
+  return [...seen.values(), ...H.bots].slice(0,8);
 }
 function presOf(pid){
   let found = null;
   for(const p of H.peers){ const pr=p.presence||{}; if(pr.role==="player" && pr.pid===pid) found = pr; }
   return found;
 }
-function isOn(pid){ return !!presOf(pid); }
+function isOn(pid){ return isBot(pid) || !!presOf(pid); }
 function nameOf(pid){ const p = H.G.players.find(x=>x.pid===pid); return p ? p.name : "?"; }
 /* Answers and votes are kept here once received, so a phone that locks
    or drops its connection doesn't take its answers with it. */
@@ -520,7 +597,7 @@ function setPhase(ph, ms){ H.G.phase = ph; H.G.endsAt = ms ? Date.now()+ms : 0; 
 function startGame(){
   const G = H.G;
   G.players = lobbyPlayers().map(p=>({...p, color:H.colorOf[p.pid]}));
-  if(G.players.length < 3) return;
+  if(G.players.length < 3 || !G.players.some(p=>!isBot(p.pid))) return;
   G.scores = Object.fromEntries(G.players.map(p=>[p.pid,0]));
   G.round = 1;
   setPhase("intro", T.intro);
@@ -535,7 +612,7 @@ function beginAnswer(){
   const texts = takeFrom("prompts", n);
   G.rk = "r"+G.round+"-"+rid().slice(0,5);
   G.prompts = texts.map((t,i)=>({ id:"p"+i, t, a:ps[i], b:ps[(i+1)%n] }));
-  setPhase("answer", T.answer);
+  setPhase("answer", T.answer); runBots("answer");
 }
 function allAnswered(){
   return H.G.players.every(p => !isOn(p.pid) || answeredCount(p.pid) >= tasksOf(p.pid).length);
@@ -556,7 +633,7 @@ function startVote(){
   const G = H.G, m = cur();
   G.vk = G.rk+"-m"+G.mi;
   if(!m.ta || !m.tb) return doReveal();
-  setPhase("vote", T.vote);
+  setPhase("vote", T.vote); runBots("vote");
 }
 function votedPids(){ const m=cur(); return voters(m).filter(p=>{ const v=voteOf(p.pid,H.G.vk); return v==="x"||v==="y"; }).map(p=>p.pid); }
 function allVoted(){ const m=cur(); return votedPids().length >= voters(m).length; }
@@ -592,14 +669,14 @@ function afterScores(){
 function beginFinal(){
   const G = H.G;
   G.final = { t: takeFrom("finals",1)[0], fk:"f-"+rid().slice(0,6), opts:[], res:null };
-  setPhase("fanswer", T.fanswer);
+  setPhase("fanswer", T.fanswer); runBots("fanswer");
 }
 function allFinalAnswered(){ const G=H.G; return G.players.every(p=>!isOn(p.pid) || ansOf(p.pid,G.final.fk,"f")); }
 function endFinalAnswer(){
   const G = H.G;
   G.final.opts = shuffle(G.players.map(p=>({pid:p.pid, t:ansOf(p.pid,G.final.fk,"f")})).filter(o=>o.t)).map((o,i)=>({...o,i}));
   if(G.final.opts.length < 2) return setPhase("end",0);
-  setPhase("fvote", T.fvote);
+  setPhase("fvote", T.fvote); runBots("fvote");
 }
 function finalVote(pid){
   const G=H.G, v = voteOf(pid,G.final.fk);
@@ -623,7 +700,7 @@ function finalReveal(){
 }
 function playAgain(){
   const keepColors = H.colorOf;
-  H.G = newGame(); H.colorOf = keepColors; H.memo = {ans:{},vote:{}};
+  clearBots(); H.G = newGame(); H.colorOf = keepColors; H.memo = {ans:{},vote:{}}; H.botUsed = new Set();
   changed();
 }
 
@@ -712,15 +789,19 @@ function hostView(){
   let body;
   switch(G.phase){
     case "lobby": {
-      const players = lobbyPlayers(), need = 3-players.length;
+      const players = lobbyPlayers(), need = 3-players.length, humans = players.filter(p=>!isBot(p.pid)).length;
       body = h("section",{class:"stage"},
         h("p",{class:"lead"},t("scanJoin"), h("span",{class:"url"}, prettyUrl(H.code).replace(/\?room=.*$/,"")), t("andEnter")),
         h("div",{class:"joinbox"},
           H.qr ? h("div",{html:H.qr}) : null,
           h("div",{class:"bigcode","aria-label":t("roomCode")+" "+H.code.split("").join(" ")},H.code)),
-        players.length ? h("ul",{class:"chips"}, players.map(p=>h("li",{style:"--c:"+H.colorOf[p.pid]},p.name))) : h("p",{class:"muted"},t("waitingPlayers")),
+        players.length ? h("ul",{class:"chips"}, players.map(p=>isBot(p.pid)
+            ? h("li",{class:"bot",style:"--c:"+H.colorOf[p.pid]}, h("span",{class:"bottag"},t("botTag")), p.name, h("button",{class:"chipx","aria-label":t("removeBot", p.name),title:t("removeBot", p.name),onclick:()=>removeBot(p.pid)},"×"))
+            : h("li",{style:"--c:"+H.colorOf[p.pid]},p.name))) : h("p",{class:"muted"},t("waitingPlayers")),
         h("div",{class:"row"},
-          h("button",{class:"primary big",disabled: need>0, onclick:startGame}, need>0 ? t("needMore", need) : t("startGame"))),
+          h("button",{class:"ghost",disabled: players.length>=8, onclick:addBot}, t("addBot")),
+          h("button",{class:"primary big",disabled: need>0 || humans<1, onclick:startGame}, need>0 ? t("needMore", need) : (humans<1 ? t("needHuman") : t("startGame")))),
+        H.bots.length ? h("p",{class:"muted",style:"font-size:.95rem;margin:0"},t("botHint")) : null,
         h("p",{class:"muted",style:"font-size:.95rem"},t("keepOpen")));
       break;
     }
@@ -829,7 +910,8 @@ function playerKey(){
   if(s.ph==="fanswer") k.push(s.fk, (P.ans.r===s.fk && P.ans.a.f) ? 1:0);
   if(s.ph==="fvote") k.push(s.fk, P.voted===s.fk ? 1:0);
   if(s.sc) k.push(JSON.stringify(s.sc));
-  if(Array.isArray(s.dn)) k.push(s.dn.join(","));
+  const waiting = (s.ph==="answer" && !nextTask()) || (s.ph==="fanswer" && P.ans.r===s.fk && P.ans.a.f);
+  if(waiting && Array.isArray(s.dn)) k.push(s.dn.join(","));
   if(s.ph==="lobby") k.push((s.pl||[]).length);
   k.push(lang());
   return k.join("|");
@@ -838,11 +920,13 @@ function playerRender(force){
   if(screen!=="game" || !P.nr) return;
   const k = playerKey(); if(!force && k===P.viewKey) return;
   P.viewKey = k; mount(playerView()); playerTick();
-  const f = app.querySelector("input,.pick"); if(f && f.tagName==="INPUT") f.focus();
+  const f = app.querySelector("input,.pick"); if(f && f.tagName==="INPUT"){ f.focus(); try{ f.setSelectionRange(f.value.length, f.value.length); }catch(e){} }
 }
 function answerForm(key, id, promptText, label){
-  const inp = h("input",{maxlength:"60",autocomplete:"off",enterkeyhint:"send","aria-label":t("yourAnswer"),placeholder:t("yourAnswer")});
-  const send = ()=>submitAns(key,id,inp.value);
+  const dk = key+"|"+id;
+  const inp = h("input",{maxlength:"60",autocomplete:"off",enterkeyhint:"send","aria-label":t("yourAnswer"),placeholder:t("yourAnswer"),value:(P.draft&&P.draft.k===dk)?P.draft.v:""});
+  inp.addEventListener("input",()=>{ P.draft = {k:dk, v:inp.value}; });
+  const send = ()=>{ P.draft = null; submitAns(key,id,inp.value); };
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); send(); } });
   return [ label ? h("p",{class:"count muted"},label) : null, h("div",{class:"pprompt"},promptText), inp, h("button",{class:"primary big",onclick:send},t("send")) ];
 }
