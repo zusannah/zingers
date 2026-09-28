@@ -160,6 +160,19 @@ const store = {
   get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
   set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 };
+/* per-tab: survives a reload, but two tabs on one device are two players */
+const tabStore = {
+  get(k){ try{ return sessionStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ sessionStorage.setItem(k,v); }catch(e){} }
+};
+/* timer that keeps running when the host tab is in the background */
+function startTicker(fn){
+  try{
+    const w = new Worker(URL.createObjectURL(new Blob(["setInterval(function(){postMessage(0)},250)"],{type:"text/javascript"})));
+    w.onmessage = fn; return;
+  }catch(e){}
+  setInterval(fn, 250);
+}
 const COLORS = ["#FF4F8B","#22C7B8","#FFC83D","#9B8CFF","#FF8A3D","#5ED36B","#4FB3FF","#F27BF2"];
 const T = { answer:90000, vote:20000, reveal:7000, scores:8000, intro:4500, fanswer:75000, fvote:30000, freveal:12000 };
 const BANK = window.ZINGERS_PROMPTS || { clean:[], cheeky:[], finals:[] };
@@ -337,7 +350,7 @@ function renderHome(err){
    HOST
    ====================================================================== */
 const H = { nr:null, code:"", peers:[], G:null, hid:rid(), seq:0, pool:{prompts:[],finals:[]}, used:new Set(),
-            spice:"clean", own:[], lastEmit:0, viewKey:"", colorOf:{}, qr:"" };
+            spice:"clean", own:[], lastEmit:0, viewKey:"", colorOf:{}, qr:"", memo:{ans:{},vote:{}} };
 
 function newGame(){ return { phase:"lobby", round:0, players:[], scores:{}, prompts:[], matches:[], mi:0, endsAt:0, rk:"", vk:"", reveal:null, final:null }; }
 function basePrompts(){ return H.spice==="cheeky" ? [...BANK.clean, ...BANK.cheeky] : [...BANK.clean]; }
@@ -359,12 +372,12 @@ async function hostCreate(spice, own){
   busy = false;
   if(!nr) return renderHome(netError(lastErr && lastErr.code || "error"));
   H.nr = nr; H.code = code; H.qr = qrSvg(joinUrl(code));
-  H.nr.onPeers(ch=>{ H.peers = ch.peers; if(ch.joined.length) emitState(); hostRender(false); });
+  H.nr.onPeers(ch=>{ H.peers = ch.peers; absorb(); if(ch.joined.length) emitState(); hostTick(); hostRender(false); });
   H.G = newGame();
   refillPool();
   window.addEventListener("beforeunload", e=>{ if(H.G && H.G.phase!=="lobby" && H.G.phase!=="end"){ e.preventDefault(); e.returnValue=""; } });
   try{ history.replaceState(null,"",location.pathname); }catch(e){}
-  setInterval(hostTick, 250);
+  startTicker(hostTick);
   hostRender(true);
 }
 
@@ -398,15 +411,29 @@ function presOf(pid){
 }
 function isOn(pid){ return !!presOf(pid); }
 function nameOf(pid){ const p = H.G.players.find(x=>x.pid===pid); return p ? p.name : "?"; }
+/* Answers and votes are kept here once received, so a phone that locks
+   or drops its connection doesn't take its answers with it. */
+function absorb(){
+  for(const p of H.peers){
+    const pr = p.presence||{};
+    if(pr.role!=="player") continue;
+    const pid = clean(pr.pid,24); if(!pid) continue;
+    const a = pr.ans;
+    if(a && typeof a.r==="string" && a.a && typeof a.a==="object"){
+      const k = pid+"|"+a.r, m = H.memo.ans[k] || (H.memo.ans[k] = {});
+      for(const [id,t] of Object.entries(a.a)){ const c = clean(t,60); if(c && !m[id]) m[id] = c; }
+    }
+    const v = pr.vote;
+    if(v && typeof v.k==="string" && (typeof v.v==="string" || typeof v.v==="number")){
+      const k = pid+"|"+v.k; if(!(k in H.memo.vote)) H.memo.vote[k] = v.v;
+    }
+  }
+}
 function ansOf(pid, key, id){
-  const pr = presOf(pid); const a = pr && pr.ans;
-  if(!a || a.r!==key || !a.a || typeof a.a!=="object") return null;
-  const t = clean(a.a[id],60); return t || null;
+  const m = H.memo.ans[pid+"|"+key]; return (m && m[id]) || null;
 }
 function voteOf(pid, key){
-  const pr = presOf(pid); const v = pr && pr.vote;
-  if(!v || v.k!==key) return null;
-  return v.v;
+  const k = pid+"|"+key; return (k in H.memo.vote) ? H.memo.vote[k] : null;
 }
 
 function changed(){ emitState(); hostRender(true); }
@@ -518,7 +545,7 @@ function finalReveal(){
 }
 function playAgain(){
   const keepColors = H.colorOf;
-  H.G = newGame(); H.colorOf = keepColors;
+  H.G = newGame(); H.colorOf = keepColors; H.memo = {ans:{},vote:{}};
   changed();
 }
 
@@ -545,9 +572,9 @@ function publicState(){
   const s = { hid:H.hid, seq:++H.seq, ph:G.phase, rd:G.round, rem: G.endsAt ? Math.max(0,G.endsAt-Date.now()) : 0 };
   const pl = G.phase==="lobby" ? lobbyPlayers() : G.players;
   s.pl = pl.map(p=>[p.pid, p.name, H.colorOf[p.pid]||COLORS[0]]);
-  if(G.phase==="answer"){ s.rk = G.rk; s.pr = G.prompts.map(p=>[p.id,p.t,p.a,p.b]); }
+  if(G.phase==="answer"){ s.rk = G.rk; s.pr = G.prompts.map(p=>[p.id,p.t,p.a,p.b]); s.dn = G.players.filter(p=>answeredCount(p.pid)>=tasksOf(p.pid).length).map(p=>p.pid); }
   if((G.phase==="vote"||G.phase==="reveal") && cur()){ const m=cur(); s.m = { k:G.vk, t:m.t, x:side(m,"x").text, y:side(m,"y").text, au:[m.a,m.b] }; }
-  if(G.phase==="fanswer"){ s.fk = G.final.fk; s.ft = G.final.t; }
+  if(G.phase==="fanswer"){ s.fk = G.final.fk; s.ft = G.final.t; s.dn = G.players.filter(p=>ansOf(p.pid,G.final.fk,"f")).map(p=>p.pid); }
   if(G.phase==="fvote"){ s.fk = G.final.fk; s.ft = G.final.t; s.fo = G.final.opts.map(o=>[o.i,o.t,o.pid]); }
   if(["scores","freveal","end","reveal"].includes(G.phase)) s.sc = G.scores;
   return s;
@@ -671,14 +698,14 @@ const P = { nr:null, code:"", pid:"", name:"", st:null, hid:null, seq:0, localEn
 
 async function playerJoin(code, name){
   if(busy) return;
-  let pid = store.get("zing-pid"); if(!pid){ pid = rid(); store.set("zing-pid",pid); }
+  let pid = tabStore.get("zing-pid"); if(!pid){ pid = rid(); tabStore.set("zing-pid",pid); }
   store.set("zing-name",name); store.set("zing-code",code);
   P.code = code; P.name = name; P.pid = pid;
   busy = true; renderHome();
   try{ P.nr = await Net.join(code, s=>{ P.link = s; playerTick(); }); }
   catch(e){ busy = false; return renderHome(netError(e && e.code || "error")); }
   busy = false;
-  try{ const saved = JSON.parse(store.get("zing-state")||"null"); if(saved && saved.code===code){ P.ans = saved.ans||P.ans; P.voted = saved.voted||""; P.lastVote = saved.lastVote||null; } }catch(e){}
+  try{ const saved = JSON.parse(tabStore.get("zing-state")||"null"); if(saved && saved.code===code){ P.ans = saved.ans||P.ans; P.voted = saved.voted||""; P.lastVote = saved.lastVote||null; } }catch(e){}
   P.nr.presence(P.lastVote ? {role:"player", pid, name, ans:P.ans, vote:P.lastVote} : {role:"player", pid, name, ans:P.ans});
   P.nr.on("state", msg=>{ if(msg.sameTab) return; onState(msg.data); });
   setInterval(playerTick, 250);
@@ -709,7 +736,7 @@ function submitAns(key, id, text){
   playerRender(true);
 }
 function castVote(key, v){ P.voted = key; P.lastVote = { k:key, v }; P.nr.presence({ vote:{ k:key, v } }); saveP(); playerRender(true); }
-function saveP(){ store.set("zing-state", JSON.stringify({ code:P.code, ans:P.ans, voted:P.voted, lastVote:P.lastVote||null })); }
+function saveP(){ tabStore.set("zing-state", JSON.stringify({ code:P.code, ans:P.ans, voted:P.voted, lastVote:P.lastVote||null })); }
 
 function playerKey(){
   const s = P.st; if(!s) return "wait";
@@ -719,6 +746,7 @@ function playerKey(){
   if(s.ph==="fanswer") k.push(s.fk, (P.ans.r===s.fk && P.ans.a.f) ? 1:0);
   if(s.ph==="fvote") k.push(s.fk, P.voted===s.fk ? 1:0);
   if(s.sc) k.push(JSON.stringify(s.sc));
+  if(Array.isArray(s.dn)) k.push(s.dn.join(","));
   if(s.ph==="lobby") k.push((s.pl||[]).length);
   return k.join("|");
 }
@@ -732,6 +760,12 @@ function answerForm(key, id, promptText, label){
   const send = ()=>submitAns(key,id,inp.value);
   inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); send(); } });
   return [ label ? h("p",{class:"count muted"},label) : null, h("div",{class:"pprompt"},promptText), inp, h("button",{class:"primary big",onclick:send},"Send answer") ];
+}
+function waitingLine(){
+  const s = P.st, dn = Array.isArray(s.dn) ? s.dn : null;
+  const left = dn ? (s.pl||[]).filter(p=>p[0]!==P.pid && !dn.includes(p[0])).map(p=>p[1]) : [];
+  const txt = left.length ? "Waiting for "+left.join(", ")+". Voting starts as soon as everyone's in." : "Everyone's in. Voting starts now.";
+  return [h("p",{class:"muted"},txt), h("p",{class:"muted",style:"font-size:.9rem"},"Your answers are saved, so it's fine if your screen locks.")];
 }
 function myScoreLine(){
   const s=P.st; if(!s.sc) return null;
@@ -753,7 +787,7 @@ function playerView(){
     case "answer": {
       const t = nextTask(), all = myTasks();
       body = t ? answerForm(s.rk, t[0], t[1], all.length>1 ? `Prompt ${all.indexOf(t)+1} of ${all.length}` : "")
-               : [h("h2",{},"Answers in"), h("p",{class:"muted"},"Watch the screen while the others finish.")];
+               : [h("h2",{},"Answers in"), waitingLine()];
       break;
     }
     case "vote": {
@@ -766,7 +800,7 @@ function playerView(){
       break;
     }
     case "fanswer":
-      body = (P.ans.r===s.fk && P.ans.a.f) ? [h("h2",{},"Answer in"), h("p",{class:"muted"},"Waiting for everyone else.")] : answerForm(s.fk, "f", s.ft, "Final prompt");
+      body = (P.ans.r===s.fk && P.ans.a.f) ? [h("h2",{},"Answer in"), waitingLine()] : answerForm(s.fk, "f", s.ft, "Final prompt");
       break;
     case "fvote": {
       const opts = (Array.isArray(s.fo)?s.fo:[]).filter(o=>o[2]!==P.pid);
