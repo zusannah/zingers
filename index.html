@@ -119,6 +119,12 @@ summary{cursor:pointer;font-weight:600}
 .board .gain + .sc{margin-left:0}
 .tro{display:block;font-size:.72em;font-weight:600;opacity:.6;margin-top:.4em}
 .sent{font-size:.9rem}
+.pausedveil{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center;background:rgba(43,15,58,.72);color:#FFF3D1;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:24px}
+.pausedveil .muted{color:#E9D9F2}
+.host.is-paused .timer{opacity:.5}
+.pausebtn[aria-pressed="true"]{background:var(--pink);color:#fff;border-color:var(--pink)}
+.pausenote{margin:0;padding:.6em 1em;border-radius:12px;background:var(--pink);color:#fff;font-weight:800;text-align:center}
+@media (prefers-reduced-motion:no-preference){.pausedveil .huge{animation:throb 1.6s ease-in-out infinite}}
 @media (prefers-reduced-motion:no-preference){.freveal .fgrid .ans{animation:pop .45s cubic-bezier(.2,1.4,.4,1) both;animation-delay:calc(1.2s + var(--i,0) * .15s)}}
 .board{list-style:none;padding:0;margin:0;width:min(640px,100%);display:flex;flex-direction:column;gap:10px}
 .board li{display:flex;align-items:center;gap:14px;background:var(--card);border:3px solid var(--c,var(--line));border-radius:16px;padding:.55em 1em;font-size:1.35rem;font-weight:800}
@@ -262,14 +268,20 @@ function startTicker(fn){
   setInterval(fn, 250);
 }
 const COLORS = ["#FF4F8B","#22C7B8","#FFC83D","#9B8CFF","#FF8A3D","#5ED36B","#4FB3FF","#F27BF2"];
-const T = { answer:120000, vote:20000, reveal:13000, scores:11000, intro:4500, fanswer:100000, fvote:30000, freveal:18000 };
+const T = { answer:120000, vote:40000, reveal:13000, scores:11000, intro:4500, fanswer:100000, fvote:50000, freveal:18000 };
 const BANK_EN = window.ZINGERS_PROMPTS || { clean:[], cheeky:[], finals:[] };
 /* ---------- language ---------- */
 const DICT = window.ZING_I18N || { en:{} };
 const deviceLang = /^nl/i.test(navigator.language || "") ? "nl" : "en";
+/* Two separate settings: "zing-lang" is the host/home language (it sets the game language),
+   "zing-plang" is a player's personal language. A player's choice never touches the host screen. */
+function playerMode(){ return typeof P!=="undefined" && !!P.nr && screen==="game"; }
 function lang(){
+  if(playerMode()){
+    const p = store.get("zing-plang"); if(p==="en" || p==="nl") return p;
+    if(P.st && (P.st.lg==="nl" || P.st.lg==="en")) return P.st.lg;   /* players follow the host until they pick */
+  }
   const s = store.get("zing-lang"); if(s==="en" || s==="nl") return s;
-  if(typeof P!=="undefined" && P.nr && P.st && (P.st.lg==="nl" || P.st.lg==="en")) return P.st.lg;   /* players follow the host until they pick */
   return deviceLang;
 }
 function t(k, ...a){
@@ -282,7 +294,7 @@ function langButton(){
   return h("button",{class:"ghost small langbtn",lang:other,title:t("switchLang"),"aria-label":t("switchLang"),onclick:()=>setLang(other)}, other.toUpperCase());
 }
 function setLang(l){
-  store.set("zing-lang", l);
+  if(playerMode()) store.set("zing-plang", l); else store.set("zing-lang", l);
   if(H.nr && H.G){ refillPool(); emitState(); }
   if(screen==="home" || (!H.nr && !P.nr)) renderHome(); else if(H.nr) hostRender(true); else playerRender(true);
 }
@@ -524,7 +536,7 @@ async function hostCreate(spice, own){
   if(!nr) return renderHome(netError(lastErr && lastErr.code || "error"));
   leaveSession();
   H.nr = nr; H.code = code; H.qr = qrSvg(joinUrl(code)); screen = "game";
-  H.nr.onPeers(ch=>{ H.peers = ch.peers; absorb(); progressSound(); if(ch.joined.length) emitState(); hostTick(); hostRender(false); });
+  H.nr.onPeers(ch=>{ H.peers = ch.peers; absorb(); reclaim(); progressSound(); if(ch.joined.length) emitState(); hostTick(); hostRender(false); });
   H.G = newGame();
   refillPool();
   try{ history.replaceState(null,"",location.pathname); }catch(e){}
@@ -639,6 +651,32 @@ function presOf(pid){
   return found;
 }
 function isOn(pid){ return isBot(pid) || !!presOf(pid); }
+/* Coming back mid-game: someone who rejoins under the same name (new tab, new phone) gets their
+   old seat, score and answers back right away. Anyone new is added when the next round starts. */
+function normName(n){ return clean(n,16).toLowerCase(); }
+function reclaim(){
+  const G = H.G; if(!G || G.phase==="lobby") return;
+  const re = H.re || (H.re = {}), taken = new Set();
+  for(const p of H.peers){
+    const pr = p.presence||{}; if(pr.role!=="player") continue;
+    const pid = clean(pr.pid,24), name = normName(pr.name||"");
+    if(!pid || !name || G.players.some(x=>x.pid===pid)) continue;
+    if(re[pid]){ taken.add(re[pid]); continue; }
+    /* a closed tab can look connected for a while, so prefer an offline seat but take the name match either way */
+    const same = G.players.filter(x=>!isBot(x.pid) && normName(x.name)===name && !taken.has(x.pid));
+    const old = same.find(x=>!presOf(x.pid)) || same[0];
+    if(old){ re[pid] = old.pid; taken.add(old.pid); }
+  }
+}
+function addLatecomers(){
+  const G = H.G, re = H.re || {};
+  for(const p of lobbyPlayers()){
+    if(G.players.length >= 8) break;
+    if(isBot(p.pid) || re[p.pid] || G.players.some(x=>x.pid===p.pid)) continue;
+    if(G.players.some(x=>!isBot(x.pid) && normName(x.name)===normName(p.name))) continue;   /* a returning player, handled by reclaim() */
+    G.players.push({...p, color:H.colorOf[p.pid]}); G.scores[p.pid] = 0;
+  }
+}
 function nameOf(pid){ const p = H.G.players.find(x=>x.pid===pid); return p ? p.name : "?"; }
 /* Answers and votes are kept here once received, so a phone that locks
    or drops its connection doesn't take its answers with it. */
@@ -687,6 +725,7 @@ function answeredCount(pid){ return tasksOf(pid).filter(p=>ansOf(pid,H.G.rk,p.id
 
 function beginAnswer(){
   const G = H.G;
+  addLatecomers();
   const ps = shuffle(G.players.map(p=>p.pid)), n = ps.length;
   const texts = takeFrom("prompts", n);
   G.rk = "r"+G.round+"-"+rid().slice(0,5); G.prev = {...G.scores};
@@ -747,6 +786,7 @@ function afterScores(){
 }
 function beginFinal(){
   const G = H.G;
+  addLatecomers();
   G.final = { t: takeFrom("finals",1)[0], fk:"f-"+rid().slice(0,6), opts:[], res:null }; G.prev = {...G.scores};
   setPhase("fanswer", T.fanswer); runBots("fanswer");
 }
@@ -779,12 +819,27 @@ function finalReveal(){
 }
 function playAgain(){
   const keepColors = H.colorOf;
-  clearBots(); H.G = newGame(); H.colorOf = keepColors; H.memo = {ans:{},vote:{}}; H.botUsed = new Set();
+  clearBots(); H.re = {}; H.G = newGame(); H.colorOf = keepColors; H.memo = {ans:{},vote:{}}; H.botUsed = new Set();
   changed();
 }
 
+/* ---------- pause: freezes the clock and every phase change until the host resumes ---------- */
+function remaining(){ const G = H.G; if(!G) return 0; if(G.paused) return G.pausedLeft||0; return G.endsAt ? Math.max(0, G.endsAt-Date.now()) : 0; }
+function canPause(){ const G = H.G; return !!G && !["lobby","end"].includes(G.phase); }
+function togglePause(){
+  const G = H.G; if(!G) return;
+  if(G.paused){ G.paused = false; if(G.endsAt) G.endsAt = Date.now() + (G.pausedLeft||0); Snd.sfx("pop"); }
+  else if(canPause()){ G.paused = true; G.pausedLeft = G.endsAt ? Math.max(0, G.endsAt-Date.now()) : 0; Snd.sfx("tock"); }
+  changed();
+}
+document.addEventListener("keydown", e=>{
+  if(!H.nr || !H.G || screen!=="game" || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  if(/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) return;
+  if(e.key==="p" || e.key==="P" || (e.key==="Escape" && H.G.paused)){ e.preventDefault(); togglePause(); }
+});
 function hostTick(){
   const G = H.G; if(!G) return;
+  if(G.paused){ updateTimer(remaining()); H.lastSec = 0; if(Date.now() - H.lastEmit > 1500) emitState(); return; }
   const now = Date.now(), up = G.endsAt && now >= G.endsAt;
   switch(G.phase){
     case "intro": if(up) beginAnswer(); break;
@@ -797,17 +852,18 @@ function hostTick(){
     case "fvote": if(up || allFinalVoted()) finalReveal(); break;
     case "freveal": if(up) setPhase("end",0); break;
   }
-  updateTimer(G.endsAt ? G.endsAt-Date.now() : 0);
+  updateTimer(remaining());
   countdownSound();
   if(now - H.lastEmit > 1500) emitState();
 }
 
 function publicState(){
   const G = H.G;
-  const s = { hid:H.hid, seq:++H.seq, lg:lang(), ph:G.phase, rd:G.round, rem: G.endsAt ? Math.max(0,G.endsAt-Date.now()) : 0 };
+  const s = { hid:H.hid, seq:++H.seq, lg:lang(), ph:G.phase, rd:G.round, rem: remaining(), pz: G.paused ? 1 : 0 };
   const pl = G.phase==="lobby" ? lobbyPlayers() : G.players;
   s.pl = pl.map(p=>[p.pid, p.name, H.colorOf[p.pid]||COLORS[0]]);
-  if(G.phase==="answer"){ s.rk = G.rk; s.pr = G.prompts.map(p=>[p.id,p.t,p.a,p.b]); s.dn = G.players.filter(p=>answeredCount(p.pid)>=tasksOf(p.pid).length).map(p=>p.pid); }
+  if(H.re){ const re = {}; for(const [n,o] of Object.entries(H.re)) if(presOf(n)) re[n] = o; if(Object.keys(re).length) s.re = re; }
+  if(G.phase==="answer"){ s.ai = Object.fromEntries(G.players.map(p=>[p.pid, tasksOf(p.pid).filter(t=>ansOf(p.pid,G.rk,t.id)).map(t=>t.id)])); s.rk = G.rk; s.pr = G.prompts.map(p=>[p.id,p.t,p.a,p.b]); s.dn = G.players.filter(p=>answeredCount(p.pid)>=tasksOf(p.pid).length).map(p=>p.pid); }
   if((G.phase==="vote"||G.phase==="reveal") && cur()){ const m=cur(); s.m = { k:G.vk, t:m.t, x:side(m,"x").text, y:side(m,"y").text, au:[m.a,m.b] }; }
   if(G.phase==="fanswer"){ s.fk = G.final.fk; s.ft = G.final.t; s.dn = G.players.filter(p=>ansOf(p.pid,G.final.fk,"f")).map(p=>p.pid); }
   if(G.phase==="fvote"){ s.fk = G.final.fk; s.ft = G.final.t; s.fo = G.final.opts.map(o=>[o.i,o.t,o.pid]); }
@@ -835,7 +891,7 @@ function hostKey(){
   else if(G.phase==="fanswer") prog = G.players.map(p=>ansOf(p.pid,G.final.fk,"f")?1:0).join("");
   else if(G.phase==="fvote") prog = G.players.map(p=>finalVote(p.pid)?1:0).join("");
   const on = G.players.map(p=>isOn(p.pid)?1:0).join("");
-  return [G.phase,G.round,G.mi,prog,on,lang()].join("|");
+  return [G.phase,G.round,G.mi,prog,on,lang(),G.paused?1:0].join("|");
 }
 function hostRender(force){
   if(!H.G || screen!=="game") return;
@@ -843,7 +899,7 @@ function hostRender(force){
   const G = H.G, sk = [G.phase, G.round, G.mi, G.rk].join("|");
   /* let a fresh screen finish its entrance before redrawing it for progress updates */
   if(!force && sk===H.stageKey && Date.now()-H.stageAt < 1800){ clearTimeout(H.deferT); H.deferT = setTimeout(()=>hostRender(false), 1850-(Date.now()-H.stageAt)); return; }
-  H.viewKey = k; mount(hostView()); updateTimer(H.G.endsAt ? H.G.endsAt-Date.now() : 0);
+  H.viewKey = k; mount(hostView()); updateTimer(remaining());
   if(sk !== H.stageKey){ H.stageKey = sk; H.stageAt = Date.now(); H.popSeen = new Set(); if(!["reveal","freveal"].includes(G.phase)) enter(".host .stage"); }
   popNew(app.querySelectorAll(".status li.done, .chips li"), H.popSeen || (H.popSeen = new Set()));
 }
@@ -909,11 +965,12 @@ function ansCard(cls, info, showMeta, other){
 }
 function hostView(){
   const G = H.G;
-  const skippable = G.endsAt && !["lobby","end"].includes(G.phase);
+  const skippable = G.endsAt && !G.paused && !["lobby","end"].includes(G.phase);
   const top = h("header",{class:"hbar"},
     h("button",{class:"logo linklike",onclick:goHome,title:t("mainMenu"),"aria-label":t("logoAria")},"Zingers"),
     h("div",{class:"code"},t("room")+" ", h("b",{},H.code)),
     h("div",{id:"timer",class:"timer","aria-live":"off"}),
+    canPause() ? h("button",{class:"ghost small pausebtn",onclick:togglePause,title:t("pauseHint"),"aria-pressed":G.paused?"true":"false"}, G.paused ? t("resume") : t("pause")) : null,
     skippable ? h("button",{class:"ghost small",onclick:()=>{ if(H.G.endsAt) H.G.endsAt = Date.now(); }},t("skip")) : null,
     soundButton(), langButton());
   let body;
@@ -979,7 +1036,9 @@ function hostView(){
       break;
     }
   }
-  return h("main",{class:"host"}, top, body);
+  const veil = G.paused ? h("div",{class:"pausedveil",role:"dialog","aria-modal":"true","aria-label":t("paused")},
+    h("p",{class:"huge"}, t("paused")), h("button",{class:"primary big",onclick:togglePause}, t("resume")), h("p",{class:"muted"}, t("pauseHint"))) : null;
+  return h("main",{class:"host"+(G.paused?" is-paused":"")}, top, body, veil);
 }
 
 /* ======================================================================
@@ -1010,20 +1069,25 @@ function onState(d){
   if(d.hid !== P.hid){ P.hid = d.hid; P.seq = 0; }
   if(typeof d.seq!=="number" || d.seq <= P.seq) return;
   P.seq = d.seq; P.st = d; P.lastSeen = Date.now();
+  if(d.re && typeof d.re[P.pid]==="string" && d.re[P.pid]!==P.pid){
+    const old = clean(d.re[P.pid],24); P.pid = old; tabStore.set("zing-pid", old);
+    P.ans = {r:"",a:{}}; P.voted = ""; P.lastVote = null; saveP(); P.nr.presence({ pid:old, ans:P.ans });
+  }
   P.localEnd = d.rem ? Date.now()+Number(d.rem) : 0;
   try{ trPrefetch(); }catch(e){}
   playerRender(false);
 }
 function playerTick(){
   const tEl = document.getElementById("ptimer");
-  if(tEl){ const ms = P.localEnd - Date.now(); const s = ms>0 ? String(Math.ceil(ms/1000)) : ""; if(tEl.textContent!==s) tEl.textContent = s;
-    tEl.classList.toggle("hurry", ms>0 && ms<=5500 && !!P.st && ["answer","vote","fanswer","fvote"].includes(P.st.ph)); }
+  if(tEl){ const ms = (P.st && P.st.pz) ? Number(P.st.rem)||0 : P.localEnd - Date.now(); const s = ms>0 ? String(Math.ceil(ms/1000)) : ""; if(tEl.textContent!==s) tEl.textContent = s;
+    tEl.classList.toggle("hurry", ms>0 && ms<=5500 && !!P.st && !P.st.pz && ["answer","vote","fanswer","fvote"].includes(P.st.ph)); }
   const l = document.getElementById("lost");
   if(l){ const msg = (P.link==="down" || (P.st && Date.now()-P.lastSeen > 8000)) ? t("lost") : ""; if(l.textContent!==msg) l.textContent = msg; }
 }
 function me(){ const s=P.st; return s && Array.isArray(s.pl) ? s.pl.find(p=>p[0]===P.pid) : null; }
 function myTasks(){ const s=P.st; return (Array.isArray(s.pr)?s.pr:[]).filter(p=>p[2]===P.pid||p[3]===P.pid); }
-function nextTask(){ const s=P.st; return myTasks().find(p=>!(P.ans.r===s.rk && P.ans.a[p[0]])); }
+function finalDone(){ const s=P.st; return !!((P.ans.r===s.fk && P.ans.a.f) || (Array.isArray(s.dn) && s.dn.includes(P.pid))); }
+function nextTask(){ const s=P.st, done = (s.ai && Array.isArray(s.ai[P.pid])) ? s.ai[P.pid] : []; return myTasks().find(p=>!(P.ans.r===s.rk && P.ans.a[p[0]]) && !done.includes(p[0])); }
 function submitAns(key, id, text){
   text = clean(text,60); if(!text) return;
   if(P.ans.r !== key) P.ans = { r:key, a:{} };
@@ -1106,10 +1170,11 @@ function playerKey(){
   const k = [s.hid, s.ph, s.rd, me()?1:0];
   if(s.ph==="answer"){ const t = nextTask(); k.push(s.rk, t ? t[0] : "done"); }
   if(s.ph==="vote"||s.ph==="reveal") k.push(s.m && s.m.k, P.voted===(s.m&&s.m.k) ? 1:0);
-  if(s.ph==="fanswer") k.push(s.fk, (P.ans.r===s.fk && P.ans.a.f) ? 1:0);
+  if(s.ph==="fanswer") k.push(s.fk, finalDone() ? 1:0);
   if(s.ph==="fvote") k.push(s.fk, P.voted===s.fk ? 1:0);
   if(s.sc) k.push(JSON.stringify(s.sc));
-  const waiting = (s.ph==="answer" && !nextTask()) || (s.ph==="fanswer" && P.ans.r===s.fk && P.ans.a.f);
+  k.push(s.pz ? "pz" : "");
+  const waiting = (s.ph==="answer" && !nextTask()) || (s.ph==="fanswer" && finalDone());
   if(waiting && Array.isArray(s.dn)) k.push(s.dn.join(","));
   if(s.ph==="lobby") k.push((s.pl||[]).length);
   k.push(lang());
@@ -1163,7 +1228,7 @@ function playerView(){
   const bar = h("div",{class:"pbar"}, h("button",{class:"logo linklike",onclick:goHome,"aria-label":t("logoAria")},"Zingers"), h("span",{class:"me",style:"--c:"+color}, P.name), h("span",{class:"muted"},t("room")+" "+P.code), h("span",{id:"ptimer",class:"timer"}), langButton());
   let body;
   if(!s) body = [h("h2",{},t("inRoom")), h("p",{class:"muted"},t("waitHost"))];
-  else if(!m && s.ph!=="lobby") body = [h("h2",{},t("running")), h("p",{class:"muted"},t("nextOne"))];
+  else if(!m && s.ph!=="lobby") body = [h("h2",{},t("running")), h("p",{class:"muted"},t(["fanswer","fvote","freveal","end"].includes(s.ph) ? "nextOne" : "nextRound"))];
   else switch(s.ph){
     case "lobby": body = [h("h2",{}, m ? t("youreIn") : t("joining")), h("p",{class:"muted"}, m ? t("lobbyCount", (s.pl||[]).length) : t("roomFull"))]; break;
     case "intro": body = [h("h2",{},t("round", s.rd)), h("p",{class:"muted"},t("promptsIncoming"))]; break;
@@ -1184,7 +1249,7 @@ function playerView(){
       break;
     }
     case "fanswer":
-      body = (P.ans.r===s.fk && P.ans.a.f) ? [h("h2",{},t("answerIn")), waitingLine()] : answerForm(s.fk, "f", s.ft, t("finalPrompt"));
+      body = finalDone() ? [h("h2",{},t("answerIn")), waitingLine()] : answerForm(s.fk, "f", s.ft, t("finalPrompt"));
       break;
     case "fvote": {
       const opts = (Array.isArray(s.fo)?s.fo:[]).filter(o=>o[2]!==P.pid);
@@ -1196,7 +1261,7 @@ function playerView(){
     case "end": body = [h("h2",{},t("gameOver")), myScoreLine(), h("p",{class:"muted"},t("stayHere"))]; break;
     default: body = [h("h2",{},t("eyesScreenH")), myScoreLine()];
   }
-  return h("main",{class:"player"}, bar, h("p",{id:"lost",class:"lost",role:"status"}), h("section",{class:"pstage"}, body));
+  return h("main",{class:"player"}, bar, h("p",{id:"lost",class:"lost",role:"status"}), s && s.pz ? h("p",{class:"pausenote",role:"status"}, t("pausedByHost")) : null, h("section",{class:"pstage"}, body));
 }
 
 /* ---------- boot ---------- */

@@ -75,6 +75,7 @@ window.ZING_I18N = {
     waitHost: "Waiting for the host screen to say hello…",
     running: "A game is running",
     nextOne: "You'll be in the next one. Enjoy the show.",
+    nextRound: "You'll jump in when the next round starts. Enjoy the show.",
     youreIn: "You're in!",
     joining: "Joining…",
     lobbyCount: n => n + " player" + (n === 1 ? "" : "s") + " so far. Watch the big screen, the host starts the game.",
@@ -100,6 +101,11 @@ window.ZING_I18N = {
     botHint: "AI players answer with their own pre-written lines and vote at random.",
     translating: "Translating…",
     votedBy: "Votes from",
+    pause: "Pause",
+    resume: "Resume",
+    paused: "Paused",
+    pauseHint: "Press P to pause or resume",
+    pausedByHost: "The host paused the game",
     sentAs: x => "Sent as “" + x + "”"
   },
   nl: {
@@ -177,6 +183,7 @@ window.ZING_I18N = {
     waitHost: "Wachten tot het hostscherm hallo zegt…",
     running: "Er is al een spel bezig",
     nextOne: "Je doet mee met het volgende potje. Geniet van de show.",
+    nextRound: "Je doet mee zodra de volgende ronde begint. Geniet van de show.",
     youreIn: "Je doet mee!",
     joining: "Aanmelden…",
     lobbyCount: n => n + " speler" + (n === 1 ? "" : "s") + " tot nu toe. Kijk naar het grote scherm, de host start het spel.",
@@ -202,6 +209,11 @@ window.ZING_I18N = {
     botHint: "AI-spelers antwoorden met hun eigen vooraf geschreven zinnen en stemmen willekeurig.",
     translating: "Vertalen…",
     votedBy: "Stemmen van",
+    pause: "Pauze",
+    resume: "Verder",
+    paused: "Pauze",
+    pauseHint: "Druk op P om te pauzeren of verder te gaan",
+    pausedByHost: "De host heeft het spel gepauzeerd",
     sentAs: x => "Verstuurd als “" + x + "”"
   }
 };
