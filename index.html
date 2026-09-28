@@ -65,6 +65,10 @@ summary{cursor:pointer;font-weight:600}
 .host{flex:1;display:flex;flex-direction:column;padding:clamp(12px,2.5vw,32px);gap:12px}
 .hbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .logo{font-size:1.6rem;color:var(--pink)}
+.linklike{background:none;border:0;padding:0;cursor:pointer;font-family:Bungee, Impact, sans-serif;font-weight:400;border-radius:8px}
+.pbar .logo{font-size:1.05rem}
+.resume{border-color:var(--pink);margin:0 0 20px}
+.resume p{margin:0 0 .7em}
 .code{margin-left:auto;font-size:1.05rem}
 .code b{font-family:Bungee, Impact, sans-serif;font-weight:400;font-size:1.5rem;letter-spacing:.12em}
 .timer{font-family:Bungee, Impact, sans-serif;font-size:1.9rem;min-width:2.4em;text-align:center;background:var(--text);color:var(--bg);border-radius:12px;padding:.05em .3em}
@@ -94,6 +98,7 @@ summary{cursor:pointer;font-weight:600}
 .banner{font-family:Bungee, Impact, sans-serif;font-size:clamp(2rem,6vw,4.2rem);color:var(--pink);text-shadow:4px 4px 0 var(--line);margin:0}
 @media (prefers-reduced-motion:no-preference){.banner{animation:pop .5s cubic-bezier(.2,1.6,.4,1)}}
 @keyframes pop{from{transform:scale(.3) rotate(-8deg);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:no-preference){.freveal .fgrid .ans{animation:pop .45s cubic-bezier(.2,1.4,.4,1) both;animation-delay:calc(1.2s + var(--i,0) * .15s)}}
 .board{list-style:none;padding:0;margin:0;width:min(640px,100%);display:flex;flex-direction:column;gap:10px}
 .board li{display:flex;align-items:center;gap:14px;background:var(--card);border:3px solid var(--c,var(--line));border-radius:16px;padding:.55em 1em;font-size:1.35rem;font-weight:800}
 .board .rank{font-size:1.3rem;min-width:1.6em}
@@ -124,6 +129,7 @@ summary{cursor:pointer;font-weight:600}
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js" integrity="sha384-x0YgkOr/3UOZP2CRDxGW9e0Q+2Qjyr3uJrm4xU32Y7ZCNAo7Cc7bjhrZMi/dwczu" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@2.0.4/dist/qrcode.js" integrity="sha384-e9EFD6BGC90bkW9aDV5xbbBfzwN7G8YImHao2lfLVKV/hPB0E0go+H3I64h7oHtA" crossorigin="anonymous"></script>
 <script src="prompts.js"></script>
+<script src="sound.js"></script>
 <script>
 (function(){
 "use strict";
@@ -301,7 +307,50 @@ function netError(code){
 
 /* ---------- home ---------- */
 const urlRoom = (new URLSearchParams(location.search).get("room")||"").toUpperCase().replace(/[^A-Z]/g,"").slice(0,4);
-let busy = false;
+let busy = false, showHostPane = false;
+/* ---------- sound (host screen only) ---------- */
+const Snd = window.ZingSound || { init(){}, startMusic(){}, stopMusic(){}, phase(){}, sfx(){}, isMuted(){ return true; }, toggle(){ return true; } };
+document.addEventListener("pointerdown", ()=>{ if(H.nr) Snd.init(); }, true);
+function progressSound(){
+  const G = H.G; if(!G) return;
+  let k = "", n = 0, kind = "";
+  if(G.phase==="lobby"){ k = "lobby"; n = lobbyPlayers().length; kind = "join"; }
+  else if(G.phase==="answer"){ k = G.rk; n = G.players.reduce((a,p)=>a+answeredCount(p.pid),0); kind = "pop"; }
+  else if(G.phase==="vote" && cur()){ k = G.vk; n = votedPids().length; kind = "tick"; }
+  else if(G.phase==="fanswer"){ k = G.final.fk; n = G.players.filter(p=>ansOf(p.pid,G.final.fk,"f")).length; kind = "pop"; }
+  else if(G.phase==="fvote"){ k = G.final.fk+"v"; n = G.players.filter(p=>finalVote(p.pid)).length; kind = "tick"; }
+  if(k && k===H.sndK && n>H.sndN) Snd.sfx(kind);
+  H.sndK = k; H.sndN = n;
+}
+function countdownSound(){
+  const G = H.G;
+  if(G && G.endsAt && ["answer","vote","fanswer","fvote"].includes(G.phase)){
+    const sec = Math.ceil((G.endsAt-Date.now())/1000);
+    if(sec>=1 && sec<=5 && sec!==H.lastSec){ H.lastSec = sec; Snd.sfx(sec<=3 ? "tockHi" : "tock"); }
+  } else H.lastSec = 0;
+}
+function soundButton(){
+  const label = m=>m ? "Unmute" : "Mute";
+  return h("button",{class:"ghost small","aria-pressed":String(Snd.isMuted()),onclick:e=>{ const m = Snd.toggle(); e.currentTarget.textContent = label(m); e.currentTarget.setAttribute("aria-pressed",String(m)); }}, label(Snd.isMuted()));
+}
+
+/* ---------- navigation between the main menu and a running game ---------- */
+let screen = "game";
+function goHome(){ screen = "home"; renderHome(); window.scrollTo(0,0); }
+function backToGame(){ screen = "game"; if(H.nr) hostRender(true); else if(P.nr) playerRender(true); }
+function resumeBanner(){
+  const label = H.nr ? "You're hosting room "+H.code+"." : (P.nr ? "You're in room "+P.code+" as "+P.name+"." : "");
+  if(!label) return null;
+  return h("section",{class:"pane resume"},
+    h("p",{style:"font-weight:800"}, label),
+    h("button",{class:"primary big",onclick:backToGame}, "Back to game"),
+    h("p",{class:"muted",style:"font-size:.9rem;margin:.8em 0 0"}, H.nr ? "Hosting or joining another game from here ends this one for everyone." : "Joining or hosting another game from here leaves this one."));
+}
+function leaveSession(){
+  if(H.nr){ try{ H.nr.close(); }catch(e){} Snd.stopMusic(); H.nr = null; H.G = null; H.peers = []; H.memo = {ans:{},vote:{}}; H.colorOf = {}; H.used = new Set(); H.viewKey = ""; H.hid = rid(); H.seq = 0; }
+  if(P.nr){ try{ P.nr.close(); }catch(e){} P.nr = null; P.st = null; P.hid = null; P.seq = 0; P.localEnd = 0; P.lastSeen = 0; P.viewKey = ""; P.ans = {r:"",a:{}}; P.voted = ""; P.lastVote = null; P.link = "up"; }
+}
+
 function renderHome(err){
   const savedName = store.get("zing-name")||"";
   const savedCode = urlRoom || store.get("zing-code")||"";
@@ -337,9 +386,10 @@ function renderHome(err){
   mount(h("main",{class:"home"},
     h("h1",{},"Zingers"),
     h("p",{class:"tag"},"A quick-wit party game. One screen hosts the show, everyone answers and votes on their phone, and the funniest answer wins."),
+    resumeBanner(),
     err ? h("p",{class:"warn",role:"alert"},err) : null,
-    h("div",{class:"panes"}, urlRoom ? [joinPane] : [joinPane, hostPane]),
-    urlRoom ? h("p",{class:"fine"}, h("a",{href:location.pathname,style:"color:inherit"},"Want to host your own game instead?")) : null,
+    h("div",{class:"panes"}, urlRoom && !showHostPane ? [joinPane] : [joinPane, hostPane]),
+    urlRoom && !showHostPane ? h("p",{class:"fine"}, h("a",{href:location.pathname,style:"color:inherit",onclick:e=>{ e.preventDefault(); showHostPane = true; renderHome(); }},"Want to host your own game instead?")) : null,
     h("p",{class:"fine muted"},"3 to 8 players. No accounts or installs. Phones connect straight to the host screen, so keep the host tab open for the whole game.")
   ));
   const focusEl = err && /name/.test(err) ? nameIn : (urlRoom && !savedName ? nameIn : (err ? codeIn : null));
@@ -362,6 +412,7 @@ function refillPool(){
 
 async function hostCreate(spice, own){
   if(busy) return;
+  Snd.init();
   H.spice = spice === "cheeky" ? "cheeky" : "clean"; H.own = own||[];
   busy = true; renderHome();
   let code = "", nr = null, lastErr = null;
@@ -371,13 +422,18 @@ async function hostCreate(spice, own){
   }
   busy = false;
   if(!nr) return renderHome(netError(lastErr && lastErr.code || "error"));
-  H.nr = nr; H.code = code; H.qr = qrSvg(joinUrl(code));
-  H.nr.onPeers(ch=>{ H.peers = ch.peers; absorb(); if(ch.joined.length) emitState(); hostTick(); hostRender(false); });
+  leaveSession();
+  H.nr = nr; H.code = code; H.qr = qrSvg(joinUrl(code)); screen = "game";
+  H.nr.onPeers(ch=>{ H.peers = ch.peers; absorb(); progressSound(); if(ch.joined.length) emitState(); hostTick(); hostRender(false); });
   H.G = newGame();
   refillPool();
-  window.addEventListener("beforeunload", e=>{ if(H.G && H.G.phase!=="lobby" && H.G.phase!=="end"){ e.preventDefault(); e.returnValue=""; } });
   try{ history.replaceState(null,"",location.pathname); }catch(e){}
-  startTicker(hostTick);
+  if(!H.started){
+    H.started = true;
+    window.addEventListener("beforeunload", e=>{ if(H.nr && H.G && H.G.phase!=="lobby" && H.G.phase!=="end"){ e.preventDefault(); e.returnValue=""; } });
+    startTicker(hostTick);
+  }
+  Snd.startMusic(); Snd.phase("lobby");
   hostRender(true);
 }
 
@@ -437,7 +493,7 @@ function voteOf(pid, key){
 }
 
 function changed(){ emitState(); hostRender(true); }
-function setPhase(ph, ms){ H.G.phase = ph; H.G.endsAt = ms ? Date.now()+ms : 0; changed(); }
+function setPhase(ph, ms){ H.G.phase = ph; H.G.endsAt = ms ? Date.now()+ms : 0; changed(); H.sndK = ""; Snd.phase(ph, ph==="reveal" ? H.G.reveal : null); }
 
 function startGame(){
   const G = H.G;
@@ -564,6 +620,7 @@ function hostTick(){
     case "freveal": if(up) setPhase("end",0); break;
   }
   updateTimer(G.endsAt ? G.endsAt-Date.now() : 0);
+  countdownSound();
   if(now - H.lastEmit > 1500) emitState();
 }
 
@@ -602,7 +659,7 @@ function hostKey(){
   return [G.phase,G.round,G.mi,prog,on].join("|");
 }
 function hostRender(force){
-  if(!H.G) return;
+  if(!H.G || screen!=="game") return;
   const k = hostKey(); if(!force && k===H.viewKey) return;
   H.viewKey = k; mount(hostView()); updateTimer(H.G.endsAt ? H.G.endsAt-Date.now() : 0);
 }
@@ -625,10 +682,11 @@ function hostView(){
   const G = H.G;
   const skippable = G.endsAt && !["lobby","end"].includes(G.phase);
   const top = h("header",{class:"hbar"},
-    h("div",{class:"logo"},"Zingers"),
+    h("button",{class:"logo linklike",onclick:goHome,title:"Main menu","aria-label":"Zingers, back to main menu"},"Zingers"),
     h("div",{class:"code"},"Room ", h("b",{},H.code)),
     h("div",{id:"timer",class:"timer","aria-live":"off"}),
-    skippable ? h("button",{class:"ghost small",onclick:()=>{ if(H.G.endsAt) H.G.endsAt = Date.now(); }},"Skip") : null);
+    skippable ? h("button",{class:"ghost small",onclick:()=>{ if(H.G.endsAt) H.G.endsAt = Date.now(); }},"Skip") : null,
+    soundButton());
   let body;
   switch(G.phase){
     case "lobby": {
@@ -676,8 +734,8 @@ function hostView(){
         h("p",{class:"lead"},"Vote for your favourite on your phone."), statusList(pid=>!!finalVote(pid)));
       break;
     case "freveal":
-      body = h("section",{class:"stage"}, h("div",{class:"marquee"}, G.final.t),
-        h("div",{class:"fgrid"}, [...G.final.res].sort((a,b)=>b.votes.length-a.votes.length).map(o=>h("div",{class:"ans"},
+      body = h("section",{class:"stage freveal"}, h("div",{class:"marquee"}, G.final.t),
+        h("div",{class:"fgrid"}, [...G.final.res].sort((a,b)=>a.votes.length-b.votes.length).map((o,i)=>h("div",{class:"ans",style:"--i:"+i},
           h("div",{},o.t), h("div",{class:"who"},nameOf(o.pid)), h("div",{class:"pts"},"+"+o.pts),
           o.votes.length ? h("div",{class:"votes"},"Votes from "+o.votes.join(", ")) : null))));
       break;
@@ -698,17 +756,20 @@ const P = { nr:null, code:"", pid:"", name:"", st:null, hid:null, seq:0, localEn
 
 async function playerJoin(code, name){
   if(busy) return;
+  if(P.nr && code===P.code) return backToGame();
   let pid = tabStore.get("zing-pid"); if(!pid){ pid = rid(); tabStore.set("zing-pid",pid); }
   store.set("zing-name",name); store.set("zing-code",code);
-  P.code = code; P.name = name; P.pid = pid;
   busy = true; renderHome();
-  try{ P.nr = await Net.join(code, s=>{ P.link = s; playerTick(); }); }
+  let nr = null;
+  try{ nr = await Net.join(code, s=>{ if(P.nr===nr){ P.link = s; playerTick(); } }); }
   catch(e){ busy = false; return renderHome(netError(e && e.code || "error")); }
   busy = false;
+  leaveSession();
+  P.nr = nr; P.code = code; P.name = name; P.pid = pid; screen = "game";
   try{ const saved = JSON.parse(tabStore.get("zing-state")||"null"); if(saved && saved.code===code){ P.ans = saved.ans||P.ans; P.voted = saved.voted||""; P.lastVote = saved.lastVote||null; } }catch(e){}
   P.nr.presence(P.lastVote ? {role:"player", pid, name, ans:P.ans, vote:P.lastVote} : {role:"player", pid, name, ans:P.ans});
   P.nr.on("state", msg=>{ if(msg.sameTab) return; onState(msg.data); });
-  setInterval(playerTick, 250);
+  if(!P.ticking){ P.ticking = true; setInterval(playerTick, 250); }
   playerRender(true);
 }
 function onState(d){
@@ -751,6 +812,7 @@ function playerKey(){
   return k.join("|");
 }
 function playerRender(force){
+  if(screen!=="game" || !P.nr) return;
   const k = playerKey(); if(!force && k===P.viewKey) return;
   P.viewKey = k; mount(playerView()); playerTick();
   const f = app.querySelector("input,.pick"); if(f && f.tagName==="INPUT") f.focus();
@@ -776,7 +838,7 @@ function myScoreLine(){
 function playerView(){
   const s = P.st, m = me();
   const color = m ? m[2] : "var(--line)";
-  const bar = h("div",{class:"pbar"}, h("span",{class:"me",style:"--c:"+color}, P.name), h("span",{class:"muted"},"Room "+P.code), h("span",{id:"ptimer",class:"timer"}));
+  const bar = h("div",{class:"pbar"}, h("button",{class:"logo linklike",onclick:goHome,"aria-label":"Zingers, back to main menu"},"Zingers"), h("span",{class:"me",style:"--c:"+color}, P.name), h("span",{class:"muted"},"Room "+P.code), h("span",{id:"ptimer",class:"timer"}));
   let body;
   if(!s) body = [h("h2",{},"You're in the room"), h("p",{class:"muted"},"Waiting for the host screen to say hello…")];
   else if(!m && s.ph!=="lobby") body = [h("h2",{},"A game is running"), h("p",{class:"muted"},"You'll be in the next one. Enjoy the show.")];
