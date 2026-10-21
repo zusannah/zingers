@@ -713,10 +713,15 @@ function aiRequest(kind){
   const G = H.G; if(!G) return;
   const tasks = aiTasks(kind); if(!tasks.length) return;
   const free = !AI_URL, now = Date.now();
-  if(free && now - aiLastAt < FREE_GAP) return;   /* free limit: this batch uses the bank */
-  aiLastAt = now;
+  let delay = 0;
+  if(free){ const wait = FREE_GAP - (now - aiLastAt); if(wait > 20000) return; if(wait > 0) delay = wait; }   /* free limit: wait it out if short, else use the bank */
+  aiLastAt = now + delay;
   const ans = H.aiAns || (H.aiAns = {}), pend = H.aiPend || (H.aiPend = {});
-  tasks.forEach(t=>{ pend[t.key] = now + AI_WAIT; });
+  tasks.forEach(t=>{ pend[t.key] = now + delay + AI_WAIT; });
+  setTimeout(()=>aiSend(tasks, kind, free, ans, pend), delay);
+}
+function aiSend(tasks, kind, free, ans, pend){
+  const G = H.G; if(!G){ tasks.forEach(t=>{ delete pend[t.key]; }); return; }
   const room = { round:(kind==="answer"||kind==="votes") ? G.round : "final", games_played_in_this_room:H.gamesPlayed||0,
     players:G.players.map(p=>({ name:p.name, bot:isBot(p.pid) })), history:(H.humor||[]).slice(-40) };
   const ctl = new AbortController(), tm = setTimeout(()=>ctl.abort(), AI_WAIT);
