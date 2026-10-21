@@ -1,4 +1,7 @@
-/* Zingers prompt bank. Add your own: one string per line, keep them short and open-ended. */
+/* Zingers prompt bank. Add your own: one string per line, keep them short and open-ended.
+   The English and Dutch lists line up by position (item 5 in one is item 5 in the other),
+   so the game can tell a prompt was already played even after switching language.
+   Add new prompts at the END of a list, and in both languages at the same position. */
 window.ZINGERS_PROMPTS = {
   clean: [
     "A terrible name for a retirement home",

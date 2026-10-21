@@ -318,11 +318,35 @@ function qrSvg(text){
    ====================================================================== */
 const PEER_PREFIX = "zingers-v1-";
 const PEER_OPTS = Object.assign({ debug:0 }, window.ZINGERS_PEER_OPTIONS || {}); /* optional: point at your own PeerServer */
+/* TURN relay: lets phones reach the host when a direct connection is blocked (uni/office wifi, some mobile networks).
+   Paste your free Open Relay (metered.ca) credentials URL between the quotes. */
+const TURN_URL = window.ZINGERS_TURN_URL || "";
+let icePromise = null;
+function getIce(){
+  if(icePromise) return icePromise;
+  icePromise = (async ()=>{
+    const stun = [{ urls:"stun:stun.l.google.com:19302" }, { urls:"stun:stun.cloudflare.com:3478" }];
+    if(!TURN_URL) return null;
+    try{
+      const ctl = new AbortController(); const t = setTimeout(()=>ctl.abort(), 5000);
+      const r = await fetch(TURN_URL, { signal:ctl.signal }); clearTimeout(t);
+      const list = await r.json();
+      if(Array.isArray(list) && list.length) return [...stun, ...list];
+    }catch(e){}
+    return null;   /* fall back to PeerJS defaults */
+  })();
+  return icePromise;
+}
+async function peerOpts(){
+  const ice = await getIce();
+  return ice ? { ...PEER_OPTS, config:{ ...(PEER_OPTS.config||{}), iceServers:ice } } : PEER_OPTS;
+}
+getIce();   /* start fetching early */
 const Net = {
   host(code){
-    return new Promise((resolve, reject)=>{
+    return new Promise(async (resolve, reject)=>{
       if(typeof Peer === "undefined") return reject({code:"no_network_lib"});
-      const peer = new Peer(PEER_PREFIX+code.toLowerCase(), PEER_OPTS);
+      const peer = new Peer(PEER_PREFIX+code.toLowerCase(), await peerOpts());
       const conns = new Map();           // connectionId -> {conn, presence}
       let peersCb = ()=>{}; let opened = false;
       const peers = ()=>[...conns.values()].filter(c=>c.presence).map(c=>({presence:c.presence, get seen(){ return c.seen; }, get hb(){ return c.hb; }}));
@@ -363,10 +387,10 @@ const Net = {
     });
   },
   join(code, onStatus){
-    return new Promise((resolve, reject)=>{
+    return new Promise(async (resolve, reject)=>{
       if(typeof Peer === "undefined") return reject({code:"no_network_lib"});
       const hostId = PEER_PREFIX+code.toLowerCase();
-      const peer = new Peer(PEER_OPTS);
+      const peer = new Peer(await peerOpts());
       const handlers = {}; let pres = {}; let conn = null; let settled = false; let retry = null;
       const status = s=>{ try{ onStatus && onStatus(s); }catch(e){} };
       function connect(){
@@ -426,7 +450,12 @@ function netError(code){
 const urlRoom = (new URLSearchParams(location.search).get("room")||"").toUpperCase().replace(/[^A-Z]/g,"").slice(0,4);
 let busy = false, showHostPane = false;
 /* ---------- sound (host screen only) ---------- */
-const Snd = window.ZingSound || { init(){}, startMusic(){}, stopMusic(){}, phase(){}, sfx(){}, isMuted(){ return true; }, toggle(){ return true; } };
+const Snd = window.ZingSound || { init(){}, startMusic(){}, stopMusic(){}, phase(){}, sfx(){}, isMuted(){ return true; }, toggle(){ return true; }, isMusicOff(){ return true; }, toggleMusic(){ return true; } };
+/* Music only plays on the host's game screen, not while paused, on the menu, or after the game ends */
+function musicSync(){
+  const G = H.G;
+  if(H.nr && G && screen==="game" && !G.paused && G.phase!=="end") Snd.startMusic(); else Snd.stopMusic();
+}
 document.addEventListener("pointerdown", ()=>{ if(H.nr) Snd.init(); }, true);
 function progressSound(){
   const G = H.G; if(!G) return;
@@ -446,6 +475,10 @@ function countdownSound(){
     if(sec>=1 && sec<=5 && sec!==H.lastSec){ H.lastSec = sec; Snd.sfx(sec<=3 ? "tockHi" : "tock"); }
   } else H.lastSec = 0;
 }
+function musicButton(){
+  const label = off=>off ? t("musicOn") : t("musicOff");
+  return h("button",{class:"ghost small","aria-pressed":String(Snd.isMusicOff()),onclick:e=>{ const off = Snd.toggleMusic(); if(!off) musicSync(); e.currentTarget.textContent = label(off); e.currentTarget.setAttribute("aria-pressed",String(off)); }}, label(Snd.isMusicOff()));
+}
 function soundButton(){
   const label = m=>m ? t("unmute") : t("mute");
   return h("button",{class:"ghost small","aria-pressed":String(Snd.isMuted()),onclick:e=>{ const m = Snd.toggle(); e.currentTarget.textContent = label(m); e.currentTarget.setAttribute("aria-pressed",String(m)); }}, label(Snd.isMuted()));
@@ -453,8 +486,8 @@ function soundButton(){
 
 /* ---------- navigation between the main menu and a running game ---------- */
 let screen = "game";
-function goHome(){ screen = "home"; renderHome(); window.scrollTo(0,0); }
-function backToGame(){ screen = "game"; if(H.nr) hostRender(true); else if(P.nr) playerRender(true); }
+function goHome(){ screen = "home"; musicSync(); renderHome(); window.scrollTo(0,0); }
+function backToGame(){ screen = "game"; musicSync(); if(H.nr) hostRender(true); else if(P.nr) playerRender(true); }
 function resumeBanner(){
   const label = H.nr ? t("resumeHost", H.code) : (P.nr ? t("resumePlayer", P.code, P.name) : "");
   if(!label) return null;
@@ -514,6 +547,28 @@ function renderHome(err){
   if(focusEl) focusEl.focus();
 }
 
+/* ---------- stats ---------- */
+const LOG_URL = window.ZINGERS_LOG_URL || "";
+const LOGQ_KEY = "zing-logq", LOG_MAX = 2000;
+function readJSON(k){ try{ const v = JSON.parse(store.get(k)||"[]"); return Array.isArray(v) ? v : []; }catch(e){ return []; } }
+function logRows(rows){
+  if(!LOG_URL || !rows.length) return;
+  store.set(LOGQ_KEY, JSON.stringify(readJSON(LOGQ_KEY).concat(rows).slice(-LOG_MAX)));
+  flushLog();
+}
+let logFlushing = false;
+async function flushLog(){
+  if(!LOG_URL || logFlushing) return;
+  const q = readJSON(LOGQ_KEY); if(!q.length) return;
+  logFlushing = true;
+  try{
+    await fetch(LOG_URL, { method:"POST", mode:"no-cors", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body:JSON.stringify({ rows:q }) });
+    store.set(LOGQ_KEY, JSON.stringify(readJSON(LOGQ_KEY).slice(q.length)));
+  }catch(e){}
+  logFlushing = false;
+}
+setTimeout(flushLog, 3000);
+
 /* ======================================================================
    HOST
    ====================================================================== */
@@ -522,11 +577,27 @@ const H = { nr:null, code:"", peers:[], G:null, hid:rid(), seq:0, pool:{prompts:
 
 function newGame(){ return { phase:"lobby", round:0, players:[], scores:{}, prompts:[], matches:[], mi:0, endsAt:0, rk:"", vk:"", reveal:null, final:null }; }
 function basePrompts(){ const B = bank(); return H.spice==="cheeky" ? [...B.clean, ...B.cheeky] : [...B.clean]; }
-function refillPool(){
-  const own = shuffle(H.own.filter(t=>!H.used.has(t)));
-  H.pool.prompts = [...own, ...shuffle(basePrompts().filter(t=>!own.includes(t)))];
-  H.pool.finals = shuffle(bank().finals);
+/* Prompt picking: least recently played first, remembered on this device across games, reloads
+   and languages (EN and NL lists line up by position, so "c57" is the same prompt in both).
+   Never-played prompts come first in random order, then the ones played longest ago. */
+const SEEN_KEY = "zing-seen";
+function seenMap(){ try{ const m = JSON.parse(store.get(SEEN_KEY)||"{}"); return m && typeof m==="object" ? m : {}; }catch(e){ return {}; } }
+function markSeen(ids){
+  const m = seenMap(), now = Date.now();
+  ids.forEach((id,i)=>{ m[id] = now + i; });
+  const keep = Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,600);   /* cap storage */
+  store.set(SEEN_KEY, JSON.stringify(Object.fromEntries(keep)));
 }
+function candidates(key){
+  const B = bank();
+  if(key==="finals") return B.finals.map((t,i)=>({id:"f"+i, t}));
+  const base = B.clean.map((t,i)=>({id:"c"+i, t}));
+  if(H.spice==="cheeky") B.cheeky.forEach((t,i)=>base.push({id:"k"+i, t}));
+  const own = H.own.map(t=>({id:"o:"+t.toLowerCase(), t, own:true}));
+  const ownTexts = new Set(own.map(o=>o.t.toLowerCase()));
+  return [...own, ...base.filter(b=>!ownTexts.has(b.t.toLowerCase()))];
+}
+function refillPool(){}   /* kept for callers; picking is done fresh each time in takeFrom() */
 
 async function hostCreate(spice, own){
   if(busy) return;
@@ -552,19 +623,21 @@ async function hostCreate(spice, own){
     window.addEventListener("beforeunload", e=>{ if(H.nr && H.G && H.G.phase!=="lobby" && H.G.phase!=="end"){ e.preventDefault(); e.returnValue=""; } });
     startTicker(hostTick);
   }
-  Snd.startMusic(); Snd.phase("lobby");
+  musicSync(); Snd.phase("lobby");
   hostRender(true);
 }
 
 function takeFrom(key, n){
-  const out=[]; let guard=0;
-  while(out.length<n && guard++<400){
-    if(!H.pool[key].length){ if(key==="prompts"){ H.pool.prompts = shuffle(basePrompts()); } else H.pool.finals = shuffle(bank().finals); }
-    const t = H.pool[key].shift();
-    if(H.used.has(t) && guard<200) continue;
-    H.used.add(t); out.push(t);
-  }
-  return out;
+  const seen = seenMap();
+  const age = c=>H.used.has(c.id) ? Infinity : (seen[c.id]||0);   /* used in this session: last resort */
+  const list = shuffle(candidates(key)).sort((a,b)=>{
+    if(a.own!==b.own && !H.used.has(a.id) && !H.used.has(b.id)) return a.own ? -1 : 1;   /* host's own prompts first */
+    return age(a)-age(b);
+  });
+  const pick = list.slice(0, n);
+  while(pick.length < n && list.length) pick.push(list[pick.length % list.length]);   /* tiny bank: allow repeats */
+  pick.forEach(c=>{ H.used.add(c.id); (H.idOf || (H.idOf = {}))[c.t] = c.id; }); markSeen(pick.map(c=>c.id));
+  return pick.map(c=>c.t);
 }
 
 /* ---------- AI players: answer from a pre-written bank, vote at random ---------- */
@@ -714,7 +787,7 @@ function voteOf(pid, key){
 
 function changed(){ emitState(); hostRender(true); }
 function setPhase(ph, ms){
-  H.G.phase = ph; H.G.endsAt = ms ? Date.now()+ms : 0; changed(); H.sndK = ""; Snd.phase(ph, ph==="reveal" ? H.G.reveal : null);
+  H.G.phase = ph; H.G.endsAt = ms ? Date.now()+ms : 0; changed(); H.sndK = ""; Snd.phase(ph, ph==="reveal" ? H.G.reveal : null); musicSync();
   if(ph==="reveal" && H.G.reveal && H.G.reveal.zinger) confetti(90, 2800);
   if(ph==="freveal") confetti(70, 1400 + (H.G.final.res||[]).length*150 + 600);
   if(ph==="end") confetti(160, 300);
@@ -725,7 +798,7 @@ function startGame(){
   G.players = lobbyPlayers().map(p=>({...p, color:H.colorOf[p.pid]}));
   if(G.players.length < 3 || !G.players.some(p=>!isBot(p.pid))) return;
   G.scores = Object.fromEntries(G.players.map(p=>[p.pid,0]));
-  G.round = 1;
+  G.round = 1; G.gid = new Date().toISOString().slice(0,16).replace("T"," ")+" "+H.code;
   setPhase("intro", T.intro);
 }
 
@@ -767,20 +840,27 @@ function allVoted(){ const m=cur(); return votedPids().length >= voters(m).lengt
 function doReveal(){
   const G = H.G, m = cur(), mult = G.round;
   const X = side(m,"x"), Y = side(m,"y");
-  const vx=[], vy=[];
+  const vx=[], vy=[]; let hx=0, hy=0;   /* hx/hy: human votes only, bots vote at random */
   if(m.ta && m.tb){
-    for(const p of G.players){ if(p.pid===m.a||p.pid===m.b) continue; const v=voteOf(p.pid,G.vk); if(v==="x") vx.push(p.name); else if(v==="y") vy.push(p.name); }
+    for(const p of G.players){ if(p.pid===m.a||p.pid===m.b) continue; const v=voteOf(p.pid,G.vk), bot=isBot(p.pid); if(v==="x"){ vx.push(p.name); if(!bot) hx++; } else if(v==="y"){ vy.push(p.name); if(!bot) hy++; } }
   }
   let px = vx.length*100*mult, py = vy.length*100*mult, zinger=null, forfeit=false;
   if(!X.text || !Y.text){ forfeit = true; if(X.text) px = 250*mult; if(Y.text) py = 250*mult; }
   else {
     if(vx.length>vy.length) px += 100*mult; else if(vy.length>vx.length) py += 100*mult;
-    const total = vx.length+vy.length;
-    if(total>=2 && (vx.length===total || vy.length===total)){ zinger = vx.length ? "x" : "y"; if(zinger==="x") px += 200*mult; else py += 200*mult; }
+    const humans = hx+hy;   /* Zinger = every human vote on one side, bots ignored */
+    if(humans>=1 && vx.length+vy.length>=2 && (hx===humans || hy===humans)){   /* at least 2 votes in total, bots included */ zinger = hx ? "x" : "y"; if(zinger==="x") px += 200*mult; else py += 200*mult; }
   }
   if(X.text) G.scores[X.pid] = (G.scores[X.pid]||0)+px;
   if(Y.text) G.scores[Y.pid] = (G.scores[Y.pid]||0)+py;
   G.reveal = { x:{...X, votes:vx, pts:X.text?px:0}, y:{...Y, votes:vy, pts:Y.text?py:0}, zinger, forfeit };
+  try{
+    const R = G.reveal, ts = new Date().toISOString();
+    logRows([["x",R.x,hx,R.y],["y",R.y,hy,R.x]].map(([s,S,hv,O])=>({ ts, game:G.gid||"", lang:lang(), mode:H.spice, round:G.round, match:G.mi+1,
+      prompt_id:(H.idOf||{})[m.t]||"", prompt:m.t, player:nameOf(S.pid), bot:isBot(S.pid)?1:0, answer:S.text||"",
+      votes:S.votes.length, human_votes:hv, bot_votes:S.votes.length-hv, voters:S.votes.join(", "),
+      points:S.pts, won:S.pts>O.pts?1:0, zinger:zinger===s?1:0, forfeit:forfeit?1:0 })));
+  }catch(e){}
   setPhase("reveal", T.reveal);
 }
 function nextMatch(){
@@ -816,7 +896,8 @@ function allFinalVoted(){ return finalVoters().every(p=>finalVote(p.pid)); }
 function finalReveal(){
   const G = H.G;
   const tally = new Map(G.final.opts.map(o=>[o.i,[]]));
-  for(const p of G.players){ const o = finalVote(p.pid); if(o) tally.get(o.i).push(p.name); }
+  const hum = new Map(G.final.opts.map(o=>[o.i,0]));
+  for(const p of G.players){ const o = finalVote(p.pid); if(o){ tally.get(o.i).push(p.name); if(!isBot(p.pid)) hum.set(o.i, hum.get(o.i)+1); } }
   const top = Math.max(0,...[...tally.values()].map(v=>v.length));
   G.final.res = G.final.opts.map(o=>{
     const v = tally.get(o.i); let pts = v.length*300; const best = top>0 && v.length===top;
@@ -824,12 +905,19 @@ function finalReveal(){
     G.scores[o.pid] = (G.scores[o.pid]||0)+pts;
     return {...o, votes:v, pts, best};
   });
+  try{
+    const ts = new Date().toISOString();
+    logRows(G.final.res.map(o=>({ ts, game:G.gid||"", lang:lang(), mode:H.spice, round:"final", match:"",
+      prompt_id:(H.idOf||{})[G.final.t]||"", prompt:G.final.t, player:nameOf(o.pid), bot:isBot(o.pid)?1:0, answer:o.t,
+      votes:o.votes.length, human_votes:hum.get(o.i), bot_votes:o.votes.length-hum.get(o.i), voters:o.votes.join(", "),
+      points:o.pts, won:o.best?1:0, zinger:0, forfeit:0 })));
+  }catch(e){}
   setPhase("freveal", T.freveal);
 }
 function playAgain(){
   const keepColors = H.colorOf;
   clearBots(); H.re = {}; H.G = newGame(); H.colorOf = keepColors; H.memo = {ans:{},vote:{}}; H.botUsed = new Set();
-  changed();
+  changed(); musicSync(); Snd.phase("lobby");
 }
 
 /* ---------- pause: freezes the clock and every phase change until the host resumes ---------- */
@@ -839,7 +927,7 @@ function togglePause(){
   const G = H.G; if(!G) return;
   if(G.paused){ G.paused = false; if(G.endsAt) G.endsAt = Date.now() + (G.pausedLeft||0); Snd.sfx("pop"); }
   else if(canPause()){ G.paused = true; G.pausedLeft = G.endsAt ? Math.max(0, G.endsAt-Date.now()) : 0; Snd.sfx("tock"); }
-  changed();
+  changed(); musicSync();
 }
 document.addEventListener("keydown", e=>{
   if(!H.nr || !H.G || screen!=="game" || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -982,7 +1070,7 @@ function hostView(){
     h("div",{id:"timer",class:"timer","aria-live":"off"}),
     canPause() ? h("button",{class:"ghost small pausebtn",onclick:togglePause,title:t("pauseHint"),"aria-pressed":G.paused?"true":"false"}, G.paused ? t("resume") : t("pause")) : null,
     skippable ? h("button",{class:"ghost small",onclick:()=>{ if(H.G.endsAt) H.G.endsAt = Date.now(); }},t("skip")) : null,
-    soundButton(), langButton());
+    musicButton(), soundButton(), langButton());
   let body;
   switch(G.phase){
     case "lobby": {

@@ -4,7 +4,8 @@ window.ZingSound = (function(){
   "use strict";
   var ctx = null, master = null, musicBus = null, sfxBus = null, noiseBuf = null;
   var muted = false, musicOn = false, schedTimer = null, nextTime = 0, step = 0;
-  try{ muted = localStorage.getItem("zing-mute") === "1"; }catch(e){}
+  var musicMuted = false, lvl = 0.45;
+  try{ muted = localStorage.getItem("zing-mute") === "1"; musicMuted = localStorage.getItem("zing-music-off") === "1"; }catch(e){}
 
   var BPM = 116, SIXTEENTH = 60 / BPM / 4;
   function mtof(m){ return 440 * Math.pow(2, (m - 69) / 12); }
@@ -106,17 +107,29 @@ window.ZingSound = (function(){
   function scheduler(){
     if(!ctx) return;
     while(nextTime < ctx.currentTime + 0.15){
-      if(!muted) scheduleStep(step, nextTime);
+      if(!muted && !musicMuted) scheduleStep(step, nextTime);
       nextTime += SIXTEENTH; step++;
     }
   }
   function startMusic(){
-    if(!ctx || musicOn) return;
+    if(!ctx || musicOn || musicMuted) return;
     musicOn = true; step = 0; nextTime = ctx.currentTime + 0.1;
+    musicBus.gain.cancelScheduledValues(ctx.currentTime);
+    musicBus.gain.setTargetAtTime(lvl, ctx.currentTime, 0.3);
     schedTimer = setInterval(scheduler, 25);
   }
-  function stopMusic(){ musicOn = false; clearInterval(schedTimer); }
-  function level(v){ if(ctx) musicBus.gain.setTargetAtTime(v, ctx.currentTime, 0.4); }
+  function stopMusic(){   /* stops scheduling AND fades out notes already queued */
+    clearInterval(schedTimer); schedTimer = null;
+    if(!musicOn) return;
+    musicOn = false;
+    if(ctx){ musicBus.gain.cancelScheduledValues(ctx.currentTime); musicBus.gain.setTargetAtTime(0, ctx.currentTime, 0.12); }
+  }
+  function level(v){ lvl = v; if(ctx && musicOn) musicBus.gain.setTargetAtTime(v, ctx.currentTime, 0.4); }
+  function setMusicMuted(m){
+    musicMuted = !!m;
+    try{ localStorage.setItem("zing-music-off", musicMuted ? "1" : "0"); }catch(e){}
+    if(musicMuted) stopMusic();
+  }
 
   /* ---------- sound effects ---------- */
   function arp(notes, gap, o){
@@ -218,6 +231,7 @@ window.ZingSound = (function(){
 
   return {
     init: init, startMusic: startMusic, stopMusic: stopMusic, phase: phase, sfx: sfx,
-    isMuted: function(){ return muted; }, setMuted: setMuted, toggle: function(){ init(); setMuted(!muted); return muted; }
+    isMuted: function(){ return muted; }, setMuted: setMuted, toggle: function(){ init(); setMuted(!muted); return muted; },
+    isMusicOff: function(){ return musicMuted; }, toggleMusic: function(){ init(); setMusicMuted(!musicMuted); return musicMuted; }
   };
 })();
