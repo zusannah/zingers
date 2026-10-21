@@ -497,7 +497,7 @@ function resumeBanner(){
     h("p",{class:"muted",style:"font-size:.9rem;margin:.8em 0 0"}, H.nr ? t("resumeNoteHost") : t("resumeNotePlayer")));
 }
 function leaveSession(){
-  if(H.nr){ try{ H.nr.close(); }catch(e){} Snd.stopMusic(); clearBots(); H.bots = []; H.botUsed = new Set(); H.nr = null; H.G = null; H.peers = []; H.memo = {ans:{},vote:{}}; H.colorOf = {}; H.used = new Set(); H.viewKey = ""; H.hid = rid(); H.seq = 0; H.lang = null; }
+  if(H.nr){ try{ H.nr.close(); }catch(e){} Snd.stopMusic(); clearBots(); H.bots = []; H.botUsed = new Set(); H.humor = []; H.ai = null; H.gamesPlayed = 0; H.nr = null; H.G = null; H.peers = []; H.memo = {ans:{},vote:{}}; H.colorOf = {}; H.used = new Set(); H.viewKey = ""; H.hid = rid(); H.seq = 0; H.lang = null; }
   if(P.nr){ try{ P.nr.close(); }catch(e){} P.nr = null; P.st = null; P.hid = null; P.seq = 0; P.localEnd = 0; P.lastSeen = 0; P.viewKey = ""; P.ans = {r:"",a:{}}; P.voted = ""; P.lastVote = null; P.link = "up"; }
 }
 
@@ -676,39 +676,89 @@ function botLater(ms, still, act){
 }
 function absorbTick(){ progressSound(); hostTick(); hostRender(false); }
 function clearBots(){ H.botTimers.forEach(clearTimeout); H.botTimers = []; }
+/* ---------- live bot answers: written by Claude through the same script as the stats, learning this room's humour.
+   Memory lives only in this room (kept across "Play again", gone with a new room). Any failure or slowness -> answer bank. ---------- */
+const AI_URL = window.ZINGERS_AI_URL || LOG_URL;
+const AI_WAIT = 9000;   /* ms to wait for live answers before falling back to the bank */
+function humorNote(entry){ const h = H.humor || (H.humor = []); h.push(entry); if(h.length > 40) h.splice(0, h.length-40); }
+function aiRequest(kind){
+  const G = H.G; if(!AI_URL || !G) return;
+  const bots = G.players.filter(p=>isBot(p.pid)); if(!bots.length) return;
+  let tasks = [];
+  if(kind==="answer") tasks = bots.flatMap(b=>tasksOf(b.pid).map(t=>({ key:b.pid+"|"+G.rk+"|"+t.id, bot:b.name, prompt:t.t })));
+  else if(kind==="final") tasks = bots.map(b=>({ key:b.pid+"|"+G.final.fk+"|f", bot:b.name, prompt:G.final.t, final:true }));
+  else if(kind==="vote"){
+    const m = cur(); if(!m) return;
+    const opts = ["x","y"].map(s=>({ id:s, text:side(m,s).text }));
+    tasks = bots.filter(b=>b.pid!==m.a && b.pid!==m.b).map(b=>({ key:b.pid+"|"+G.vk+"|v", bot:b.name, prompt:m.t, vote:opts }));
+  } else if(kind==="fvote"){
+    tasks = bots.map(b=>({ key:b.pid+"|"+G.final.fk+"|v", bot:b.name, prompt:G.final.t, vote:G.final.opts.filter(o=>o.pid!==b.pid).map(o=>({ id:String(o.i), text:o.t })) })).filter(t=>t.vote.length);
+  }
+  if(!tasks.length) return;
+  const req = H.ai = { pending:true, at:Date.now(), ans:{} };
+  const body = { bots:{ lang:lang(), mode:H.spice, round:(kind==="answer"||kind==="vote") ? G.round : "final", games:H.gamesPlayed||0,
+    players:G.players.map(p=>({ name:p.name, bot:isBot(p.pid) })), history:(H.humor||[]).slice(-40), tasks } };
+  const ctl = new AbortController(), tm = setTimeout(()=>ctl.abort(), AI_WAIT);
+  fetch(AI_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body:JSON.stringify(body), signal:ctl.signal })
+    .then(r=>r.json())
+    .then(j=>{ if(j && j.answers && typeof j.answers==="object") for(const t of tasks){
+      const a = clean(j.answers[t.key], 60); if(!a) continue;
+      if(t.vote){ if(t.vote.some(o=>o.id===a)) req.ans[t.key] = a; } else req.ans[t.key] = a;
+    } })
+    .catch(()=>{})
+    .finally(()=>{ clearTimeout(tm); req.pending = false; });
+}
+/* string = live answer, undefined = still waiting, null = use the bank */
+function aiAnswer(key){ const r = H.ai; if(!r) return null; if(r.ans[key]) return r.ans[key]; return (r.pending && Date.now()-r.at < AI_WAIT) ? undefined : null; }
+/* bots vote for what they find funnier; random only if the live answer isn't there */
+function botPick(key, still, fallback, put){
+  const a = aiAnswer(key);
+  if(a===undefined){ botLater(1200, still, ()=>botPick(key, still, fallback, put)); return; }
+  put(a || fallback());
+}
+function botSay(key, promptText, still, put){
+  const a = aiAnswer(key);
+  if(a===undefined){ botLater(1200, still, ()=>botSay(key, promptText, still, put)); return; }
+  put(a || botLine(promptText));
+}
 function runBots(kind){
   const G = H.G; if(!G) return;
   const bots = G.players.filter(p=>isBot(p.pid));
   const rand = (a,b)=>a+Math.random()*(b-a);
+  aiRequest({ answer:"answer", fanswer:"final", vote:"vote", fvote:"fvote" }[kind]);
   for(const b of bots){
     if(kind==="answer"){
       const rk = G.rk; let at = rand(2500, 9000);
       for(const task of tasksOf(b.pid)){
         const tsk = task;
-        botLater(at, ()=>G===H.G && G.phase==="answer" && G.rk===rk, ()=>{
+        const still = ()=>G===H.G && G.phase==="answer" && G.rk===rk;
+        botLater(at, still, ()=>botSay(b.pid+"|"+rk+"|"+tsk.id, tsk.t, still, txt=>{
           const k = b.pid+"|"+rk, m = H.memo.ans[k] || (H.memo.ans[k] = {});
-          if(!m[tsk.id]) m[tsk.id] = botLine(tsk.t);
-        });
+          if(!m[tsk.id]) m[tsk.id] = txt;
+        }));
         at += rand(2500, 8000);
       }
     } else if(kind==="vote"){
       const vk = G.vk, m = cur();
       if(!m || m.a===b.pid || m.b===b.pid) continue;
-      botLater(rand(1500, 6000), ()=>G===H.G && G.phase==="vote" && G.vk===vk, ()=>{
-        const k = b.pid+"|"+vk; if(!(k in H.memo.vote)) H.memo.vote[k] = Math.random()<.5 ? "x" : "y";
-      });
+      const still = ()=>G===H.G && G.phase==="vote" && G.vk===vk;
+      botLater(rand(1500, 6000), still, ()=>botPick(b.pid+"|"+vk+"|v", still, ()=>Math.random()<.5 ? "x" : "y", v=>{
+        const k = b.pid+"|"+vk; if(!(k in H.memo.vote)) H.memo.vote[k] = v;
+      }));
     } else if(kind==="fanswer"){
       const fk = G.final.fk, ft = G.final.t;
-      botLater(rand(4000, 15000), ()=>G===H.G && G.phase==="fanswer" && G.final.fk===fk, ()=>{
+      const still = ()=>G===H.G && G.phase==="fanswer" && G.final.fk===fk;
+      botLater(rand(4000, 15000), still, ()=>botSay(b.pid+"|"+fk+"|f", ft, still, txt=>{
         const k = b.pid+"|"+fk, m = H.memo.ans[k] || (H.memo.ans[k] = {});
-        if(!m.f) m.f = botLine(ft);
-      });
+        if(!m.f) m.f = txt;
+      }));
     } else if(kind==="fvote"){
       const fk = G.final.fk, opts = G.final.opts.filter(o=>o.pid!==b.pid);
       if(!opts.length) continue;
-      botLater(rand(2500, 9000), ()=>G===H.G && G.phase==="fvote" && G.final.fk===fk, ()=>{
-        const k = b.pid+"|"+fk; if(!(k in H.memo.vote)) H.memo.vote[k] = opts[Math.floor(Math.random()*opts.length)].i;
-      });
+      const still = ()=>G===H.G && G.phase==="fvote" && G.final.fk===fk;
+      botLater(rand(2500, 9000), still, ()=>botPick(b.pid+"|"+fk+"|v", still, ()=>String(opts[Math.floor(Math.random()*opts.length)].i), v=>{
+        const k = b.pid+"|"+fk; if(!(k in H.memo.vote)) H.memo.vote[k] = Number(v);
+      }));
     }
   }
 }
@@ -855,6 +905,10 @@ function doReveal(){
   if(Y.text) G.scores[Y.pid] = (G.scores[Y.pid]||0)+py;
   G.reveal = { x:{...X, votes:vx, pts:X.text?px:0}, y:{...Y, votes:vy, pts:Y.text?py:0}, zinger, forfeit };
   try{
+    const R = G.reveal;
+    humorNote({ prompt:m.t, round:G.round, zinger:zinger ? nameOf(R[zinger].pid) : "", answers:[R.x,R.y].filter(S=>S.text).map(S=>({ by:nameOf(S.pid), bot:isBot(S.pid), text:S.text, votes:S.votes.length })) });
+  }catch(e){}
+  try{
     const R = G.reveal, ts = new Date().toISOString();
     logRows([["x",R.x,hx,R.y],["y",R.y,hy,R.x]].map(([s,S,hv,O])=>({ ts, game:G.gid||"", lang:lang(), mode:H.spice, round:G.round, match:G.mi+1,
       prompt_id:(H.idOf||{})[m.t]||"", prompt:m.t, player:nameOf(S.pid), bot:isBot(S.pid)?1:0, answer:S.text||"",
@@ -905,6 +959,7 @@ function finalReveal(){
     G.scores[o.pid] = (G.scores[o.pid]||0)+pts;
     return {...o, votes:v, pts, best};
   });
+  try{ humorNote({ prompt:G.final.t, round:"final", zinger:"", answers:G.final.res.map(o=>({ by:nameOf(o.pid), bot:isBot(o.pid), text:o.t, votes:o.votes.length })) }); }catch(e){}
   try{
     const ts = new Date().toISOString();
     logRows(G.final.res.map(o=>({ ts, game:G.gid||"", lang:lang(), mode:H.spice, round:"final", match:"",
@@ -916,7 +971,7 @@ function finalReveal(){
 }
 function playAgain(){
   const keepColors = H.colorOf;
-  clearBots(); H.re = {}; H.G = newGame(); H.colorOf = keepColors; H.memo = {ans:{},vote:{}}; H.botUsed = new Set();
+  clearBots(); H.re = {}; H.G = newGame(); H.colorOf = keepColors; H.memo = {ans:{},vote:{}}; H.botUsed = new Set(); H.gamesPlayed = (H.gamesPlayed||0)+1;   /* H.humor is kept: same room, same jokes */
   changed(); musicSync(); Snd.phase("lobby");
 }
 
