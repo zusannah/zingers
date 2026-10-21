@@ -680,9 +680,45 @@ function clearBots(){ H.botTimers.forEach(clearTimeout); H.botTimers = []; }
    Free open model (Pollinations, no key, 1 request per 30 s per host) unless AI_URL is set.
    Memory lives only in this room (kept across "Play again", gone with a new room). Any failure, limit or slowness -> answer bank / random vote. ---------- */
 const AI_URL = window.ZINGERS_AI_URL || "";   /* optional: the private script URL, only once it has a Claude key. Empty = free open model */
+/* Free open-weights models, no key. Tried in order; each model allows ~2 requests/min per host, so a busy one is skipped.
+   Main: Mistral Small 3.2 24B (OVH). Backups: Qwen3.5 397B (OVH), GPT-OSS 20B (Pollinations). Then the answer bank. */
+const OVH_URL = "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions";
 const FREE_AI_URL = "https://text.pollinations.ai/openai";
-const AI_WAIT = 22000, FREE_GAP = 31000;   /* the free model sometimes needs ~15-25 s on a cold start */
-let aiLastAt = 0;
+const FREE_MODELS = [
+  { url:OVH_URL, model:"Mistral-Small-3.2-24B-Instruct-2506", extra:{ temperature:0.9 }, timeout:10000 },
+  { url:OVH_URL, model:"Qwen3.5-397B-A17B", extra:{ reasoning_effort:"none", temperature:0.9 }, timeout:8000 },
+  { url:FREE_AI_URL, model:"openai-fast", extra:{ reasoning_effort:"low" }, timeout:20000 }
+];
+const AI_WAIT = 22000, FREE_GAP = 31000;
+const modelLastUse = {};
+function freeWait(now){ return Math.min(...FREE_MODELS.map(p=>Math.max(0, FREE_GAP - (now - (modelLastUse[p.model]||0))))); }
+/* model replies: strip code fences, accept answers either inside "answers" or at the top level */
+function parseAI(txt){
+  const m = String(txt||"").replace(/```(?:json)?/gi,"").match(/\{[\s\S]*\}/); if(!m) return null;
+  let o; try{ o = JSON.parse(m[0]); }catch(e){ return null; }
+  if(!o || typeof o!=="object") return null;
+  const a = Object.assign({}, o, (o.answers && typeof o.answers==="object") ? o.answers : {}); delete a.answers;
+  return { answers:a };
+}
+async function freeCall(sys, user, deadline){
+  for(const p of FREE_MODELS){
+    const now = Date.now();
+    if(now - (modelLastUse[p.model]||0) < FREE_GAP) continue;   /* this model is resting, try the next */
+    const left = deadline - now; if(left < 2500) break;
+    modelLastUse[p.model] = now;
+    const ctl = new AbortController(), tm = setTimeout(()=>ctl.abort(), Math.min(left, p.timeout));
+    try{
+      const r = await fetch(p.url, { method:"POST", headers:{ "Content-Type":"application/json" }, signal:ctl.signal,
+        body:JSON.stringify(Object.assign({ model:p.model, max_tokens:700, messages:[{ role:"system", content:sys }, { role:"user", content:user }] }, p.extra)) });
+      if(!r.ok) continue;
+      const j = await r.json(), c = (((j||{}).choices||[])[0]||{}).message;
+      const parsed = parseAI(c && c.content);
+      if(parsed && Object.keys(parsed.answers).length) return parsed;
+    }catch(e){ /* timeout or network: next model */ }
+    finally{ clearTimeout(tm); }
+  }
+  return {};
+}
 function humorNote(entry){ const h = H.humor || (H.humor = []); h.push(entry); if(h.length > 40) h.splice(0, h.length-40); }
 function aiSystem(lng, mode){
   return `You write answers for the AI players in Zingers, a Quiplash-style party game. Two players answer the same prompt, the room votes for the funnier one. A "Zinger" means every human voted for one answer. In the final everyone answers one prompt.
@@ -714,8 +750,7 @@ function aiRequest(kind){
   const tasks = aiTasks(kind); if(!tasks.length) return;
   const free = !AI_URL, now = Date.now();
   let delay = 0;
-  if(free){ const wait = FREE_GAP - (now - aiLastAt); if(wait > 15000) return; if(wait > 0) delay = wait; }   /* free limit: wait it out if short, else use the bank */
-  aiLastAt = now + delay;
+  if(free){ const wait = freeWait(now); if(wait > 15000) return; delay = wait; }   /* every model resting: wait it out if short, else use the bank */
   const ans = H.aiAns || (H.aiAns = {}), pend = H.aiPend || (H.aiPend = {});
   tasks.forEach(t=>{ pend[t.key] = now + delay + AI_WAIT; });
   setTimeout(()=>aiSend(tasks, kind, free, ans, pend), delay);
@@ -726,10 +761,7 @@ function aiSend(tasks, kind, free, ans, pend){
     players:G.players.map(p=>({ name:p.name, bot:isBot(p.pid) })), history:(H.humor||[]).slice(-40) };
   const ctl = new AbortController(), tm = setTimeout(()=>ctl.abort(), AI_WAIT);
   const call = free
-    ? fetch(FREE_AI_URL, { method:"POST", headers:{ "Content-Type":"application/json" }, signal:ctl.signal, body:JSON.stringify({ model:"openai-fast", reasoning_effort:"low", max_tokens:700, messages:[
-        { role:"system", content:aiSystem(lang(), H.spice) },
-        { role:"user", content:"<room>\n"+JSON.stringify(room)+"\n</room>\n\nHandle each task (write an answer, or pick an option id for vote tasks):\n"+JSON.stringify(tasks) } ] }) })
-        .then(r=>r.json()).then(j=>{ const txt = (((j||{}).choices||[])[0]||{}).message ? j.choices[0].message.content||"" : ""; const m = String(txt).match(/\{[\s\S]*\}/); return m ? JSON.parse(m[0]) : {}; })
+    ? freeCall(aiSystem(lang(), H.spice), "<room>\n"+JSON.stringify(room)+"\n</room>\n\nHandle each task (write an answer, or pick an option id for vote tasks):\n"+JSON.stringify(tasks), Date.now() + AI_WAIT - 500)
     : fetch(AI_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, signal:ctl.signal,
         body:JSON.stringify({ bots:{ lang:lang(), mode:H.spice, round:room.round, games:room.games_played_in_this_room, players:room.players, history:room.history, tasks } }) })
         .then(r=>r.json());
