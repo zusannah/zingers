@@ -681,7 +681,7 @@ function clearBots(){ H.botTimers.forEach(clearTimeout); H.botTimers = []; }
    Memory lives only in this room (kept across "Play again", gone with a new room). Any failure, limit or slowness -> answer bank / random vote. ---------- */
 const AI_URL = window.ZINGERS_AI_URL || "";   /* optional: the private script URL, only once it has a Claude key. Empty = free open model */
 const FREE_AI_URL = "https://text.pollinations.ai/openai";
-const AI_WAIT = 12000, FREE_GAP = 31000;
+const AI_WAIT = 22000, FREE_GAP = 31000;   /* the free model sometimes needs ~15-25 s on a cold start */
 let aiLastAt = 0;
 function humorNote(entry){ const h = H.humor || (H.humor = []); h.push(entry); if(h.length > 40) h.splice(0, h.length-40); }
 function aiSystem(lng, mode){
@@ -714,7 +714,7 @@ function aiRequest(kind){
   const tasks = aiTasks(kind); if(!tasks.length) return;
   const free = !AI_URL, now = Date.now();
   let delay = 0;
-  if(free){ const wait = FREE_GAP - (now - aiLastAt); if(wait > 20000) return; if(wait > 0) delay = wait; }   /* free limit: wait it out if short, else use the bank */
+  if(free){ const wait = FREE_GAP - (now - aiLastAt); if(wait > 15000) return; if(wait > 0) delay = wait; }   /* free limit: wait it out if short, else use the bank */
   aiLastAt = now + delay;
   const ans = H.aiAns || (H.aiAns = {}), pend = H.aiPend || (H.aiPend = {});
   tasks.forEach(t=>{ pend[t.key] = now + delay + AI_WAIT; });
@@ -733,11 +733,14 @@ function aiSend(tasks, kind, free, ans, pend){
     : fetch(AI_URL, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, signal:ctl.signal,
         body:JSON.stringify({ bots:{ lang:lang(), mode:H.spice, round:room.round, games:room.games_played_in_this_room, players:room.players, history:room.history, tasks } }) })
         .then(r=>r.json());
-  const seen = new Set((H.humor||[]).flatMap(e=>(e.answers||[]).map(x=>String(x.text).toLowerCase().trim())));
+  /* near-copies count too: "towel that never dries" = "a towel that never dries!" */
+  const norm = x=>String(x||"").toLowerCase().replace(/[^\p{L}\p{N} ]/gu," ").replace(/\b(a|an|the|de|het|een)\b/g," ").replace(/\s+/g," ").trim();
+  const seen = (H.humor||[]).flatMap(e=>(e.answers||[]).map(x=>norm(x.text))).filter(Boolean);
+  const isCopy = a=>{ const n = norm(a); return !!n && seen.some(o=>o===n || (Math.min(o.length,n.length) >= 12 && (o.includes(n) || n.includes(o)))); };
   call.then(j=>{ const got = (j && typeof j.answers==="object" && j.answers) || {};
       for(const t of tasks){
         const a = clean(got[t.key], 60).replace(/^["']|["']$/g,""); if(!a) continue;
-        if(!t.vote && seen.has(a.toLowerCase())) continue;   /* a copy of an earlier answer: use the bank instead */
+        if(!t.vote && isCopy(a)) continue;   /* a copy of an earlier answer: use the bank instead */
         if(t.vote){ if(t.vote.some(o=>o.id===a)) ans[t.key] = a; } else ans[t.key] = a;
       } })
     .catch(()=>{})
